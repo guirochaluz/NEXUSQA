@@ -48,7 +48,7 @@ if "authenticated" not in st.session_state:
 params = st.query_params
 # login automático via ?nexus_auth=success
 if params.get("nexus_auth", [None])[0] == "success":
-    st.session_state["authenticated"] = True
+    st.session_state["authenticated"] = False
     sync_all_accounts()
     st.cache_data.clear()
     st.experimental_set_query_params()
