@@ -410,7 +410,7 @@ def mostrar_dashboard():
 
     # =================== Gráfico de Linha e Pizza ===================
     st.markdown("### 💵 Total Vendido por Data e Faturamento por Conta")
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([4, 1])  # Proporção de 4 para 1
 
     with col1:
         tipo_visualizacao = st.radio("Visualização do Gráfico", ["Diária", "Mensal"], horizontal=True)
