@@ -441,41 +441,46 @@ def mostrar_dashboard():
     st.plotly_chart(fig, use_container_width=True)
 
     # =================== Gráfico de Histograma - Vendas por Dia da Semana ===================
-    st.markdown("### 📅 Vendas por Dia da Semana (Média Real)")
+st.markdown("### 📅 Vendas por Dia da Semana (Média Real)")
 
-    if not df.empty:
-        df["dia_semana"] = df["date_created"].dt.day_name()
-        traducao_dias = {
-            "Monday": "Segunda-feira",
-            "Tuesday": "Terça-feira",
-            "Wednesday": "Quarta-feira",
-            "Thursday": "Quinta-feira",
-            "Friday": "Sexta-feira",
-            "Saturday": "Sábado",
-            "Sunday": "Domingo"
-        }
-        df["dia_semana"] = df["dia_semana"].map(traducao_dias)
+if not df.empty:
+    # Obter o nome do dia da semana e traduzir
+    df["dia_semana"] = df["date_created"].dt.day_name()
+    traducao_dias = {
+        "Monday": "Segunda-feira",
+        "Tuesday": "Terça-feira",
+        "Wednesday": "Quarta-feira",
+        "Thursday": "Quinta-feira",
+        "Friday": "Sexta-feira",
+        "Saturday": "Sábado",
+        "Sunday": "Domingo"
+    }
+    df["dia_semana"] = df["dia_semana"].map(traducao_dias)
 
-        # Calcular média real de vendas por dia da semana
-        vendas_por_dia_semana = (
-            df.groupby("dia_semana")["total_amount"].sum() / df["dia_semana"].value_counts()
-        ).reindex([
-            "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"
-        ]).reset_index(name="Valor Médio")
+    # Calcular o total vendido em cada dia e o número de ocorrências
+    vendas_por_dia = df.groupby(["dia_semana", df["date_created"].dt.date])["total_amount"].sum().reset_index()
+    
+    # Tirar a média de cada dia da semana
+    media_por_dia_semana = vendas_por_dia.groupby("dia_semana")["total_amount"].mean().reindex([
+        "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"
+    ]).reset_index(name="Valor Médio")
 
-        fig_dia_semana = px.bar(
-            vendas_por_dia_semana,
-            x="dia_semana",
-            y="Valor Médio",
-            title="📅 Média Vendida por Dia da Semana",
-            labels={
-                "dia_semana": "Dia da Semana",
-                "Valor Médio": "Valor Médio Vendido"
-            },
-            text_auto='.2s',
-            color_discrete_sequence=["#32CD32"]
-        )
-        st.plotly_chart(fig_dia_semana, use_container_width=True)
+    # Plotar o gráfico
+    fig_dia_semana = px.bar(
+        media_por_dia_semana,
+        x="dia_semana",
+        y="Valor Médio",
+        title="📅 Média Vendida por Dia da Semana",
+        labels={
+            "dia_semana": "Dia da Semana",
+            "Valor Médio": "Valor Médio Vendido"
+        },
+        text_auto='.2s',
+        color_discrete_sequence=["#32CD32"]
+    )
+    st.plotly_chart(fig_dia_semana, use_container_width=True)
+
+
 
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
     st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
