@@ -56,7 +56,7 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             sync_all_accounts()
             st.cache_data.clear()
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Credenciais inválidas")
     st.stop()
@@ -226,7 +226,7 @@ def mostrar_dashboard():
             cnt=sync_all_accounts()
             st.cache_data.clear()
             st.success(f"{cnt} vendas sincronizadas")
-            st.experimental_rerun()
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
     df = carregar_vendas(nick)
