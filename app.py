@@ -378,6 +378,10 @@ def mostrar_dashboard():
 
     # 3) Aplica filtros
     df = carregar_vendas(conta_id)
+
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=["date_created", "total_amount", "quantity"])
+    
     df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
 
     if df.empty:
