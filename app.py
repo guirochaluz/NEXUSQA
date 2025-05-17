@@ -384,11 +384,12 @@ except Exception as e:
     df = pd.DataFrame(columns=["date_created", "total_amount", "quantity"])
 
 # Verifica se o DataFrame tem dados válidos
-if not df.empty:
-    df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
-else:
+if df.empty:
     st.warning("Nenhuma venda encontrada para os filtros selecionados.")
     return
+
+# Aplica o filtro de data
+df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
 
 
     # =================== Ajuste de Timezone ===================
