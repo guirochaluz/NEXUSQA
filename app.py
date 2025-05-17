@@ -409,107 +409,66 @@ def mostrar_dashboard():
     c2.metric("💰 Receita Total", format_currency(total_valor))
     c3.metric("📦 Itens Vendidos", int(total_itens))
     c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
-    
-    # =================== Gráfico de Linha - Total Vendido e Pizza por Nickname ===================
+
+    # =================== Gráfico de Linha e Pizza - Faturamento ===================
     st.markdown("### 💵 Total Vendido por Data e Faturamento por Conta")
+    col1, col2 = st.columns(2)
 
-col1, col2 = st.columns(2)
+    with col1:
+        tipo_visualizacao = st.radio("Visualização do Gráfico", ["Diária", "Mensal"], horizontal=True)
 
-with col1:
-    tipo_visualizacao = st.radio("Visualização do Gráfico", ["Diária", "Mensal"], horizontal=True)
+        if tipo_visualizacao == "Diária":
+            vendas_por_data = (
+                df
+                .groupby([df["date_created"].dt.date, "nickname"])["total_amount"]
+                .sum()
+                .reset_index(name="Valor Total")
+            )
+            eixo_x = "date_created"
+            titulo_grafico = "💵 Total Vendido por Dia (Linha por Nickname)"
+        else:
+            vendas_por_data = (
+                df
+                .groupby([df["date_created"].dt.to_period("M"), "nickname"])["total_amount"]
+                .sum()
+                .reset_index(name="Valor Total")
+            )
+            vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
+            eixo_x = "date_created"
+            titulo_grafico = "💵 Total Vendido por Mês (Linha por Nickname)"
 
-    if tipo_visualizacao == "Diária":
-        vendas_por_data = (
-            df
-            .groupby([df["date_created"].dt.date, "nickname"])["total_amount"]
-            .sum()
-            .reset_index(name="Valor Total")
+        fig = px.line(
+            vendas_por_data,
+            x=eixo_x,
+            y="Valor Total",
+            color="nickname",
+            title=titulo_grafico,
+            labels={"Valor Total": "Valor Total", "date_created": "Data", "nickname": "Conta"},
+            color_discrete_sequence=px.colors.sequential.Agsunset
         )
-        eixo_x = "date_created"
-        titulo_grafico = "💵 Total Vendido por Dia (Linha por Nickname)"
-    else:
-        vendas_por_data = (
-            df
-            .groupby([df["date_created"].dt.to_period("M"), "nickname"])["total_amount"]
-            .sum()
-            .reset_index(name="Valor Total")
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.markdown("### 🥧 Faturamento por Conta")
+        vendas_por_nickname = (
+            df.groupby("nickname")["total_amount"].sum().reset_index()
         )
-        vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
-        eixo_x = "date_created"
-        titulo_grafico = "💵 Total Vendido por Mês (Linha por Nickname)"
 
-    fig = px.line(
-        vendas_por_data,
-        x=eixo_x,
-        y="Valor Total",
-        color="nickname",
-        title=titulo_grafico,
-        labels={"Valor Total": "Valor Total", "date_created": "Data", "nickname": "Conta"},
-        color_discrete_sequence=px.colors.sequential.Agsunset
-    )
-    fig.update_traces(mode='lines+markers', marker=dict(size=5), texttemplate='%{y:,.2f}', textposition='top center')
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    # =================== Gráfico de Pizza - Distribuição de Faturamento por Conta ===================
-    st.markdown("### 🥧 Faturamento por Conta")
-    vendas_por_nickname = (
-        df.groupby("nickname")["total_amount"].sum().reset_index()
-    )
-
-    fig_pizza = px.pie(
-        vendas_por_nickname,
-        values="total_amount",
-        names="nickname",
-        title="📊 Faturamento por Nickname",
-        color_discrete_sequence=px.colors.sequential.Agsunset
-    )
-    fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
-    st.plotly_chart(fig_pizza, use_container_width=True)
-
-    # =================== Gráfico de Histograma - Vendas por Dia da Semana ===================
-    st.markdown("### 📅 Vendas por Dia da Semana (Média Real)")
-
-    if not df.empty:
-        df["dia_semana"] = df["date_created"].dt.day_name()
-        traducao_dias = {
-            "Monday": "Segunda-feira",
-            "Tuesday": "Terça-feira",
-            "Wednesday": "Quarta-feira",
-            "Thursday": "Quinta-feira",
-            "Friday": "Sexta-feira",
-            "Saturday": "Sábado",
-            "Sunday": "Domingo"
-        }
-        df["dia_semana"] = df["dia_semana"].map(traducao_dias)
-
-        # Calcular média real de vendas por dia da semana
-        vendas_por_dia = df.groupby(["dia_semana", df["date_created"].dt.date])["total_amount"].sum().reset_index()
-        media_por_dia_semana = vendas_por_dia.groupby("dia_semana")["total_amount"].mean().reindex([
-            "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"
-        ]).reset_index(name="Valor Médio")
-
-        fig_dia_semana = px.bar(
-            media_por_dia_semana,
-            x="dia_semana",
-            y="Valor Médio",
-            title="📅 Média Vendida por Dia da Semana",
-            labels={
-                "dia_semana": "Dia da Semana",
-                "Valor Médio": "Valor Médio Vendido"
-            },
-            text_auto='.2s',
-            color_discrete_sequence=["#32CD32"]
+        fig_pizza = px.pie(
+            vendas_por_nickname,
+            values="total_amount",
+            names="nickname",
+            title="📊 Faturamento por Nickname",
+            color_discrete_sequence=px.colors.sequential.Agsunset
         )
-        st.plotly_chart(fig_dia_semana, use_container_width=True)
+        st.plotly_chart(fig_pizza, use_container_width=True)
 
-        # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
-        st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
+    # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
+    st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
 
     if not df.empty:
         df["hora"] = df["date_created"].dt.hour
         
-        # Agrupamento por hora do dia, cálculo da média e soma acumulada
         faturamento_por_hora = (
             df.groupby(["hora"])["total_amount"]
             .mean()
@@ -517,7 +476,6 @@ with col2:
             .reset_index(name="Valor Médio Acumulado")
         )
 
-        # Plotar o gráfico de linha acumulado
         fig_hora = px.line(
             faturamento_por_hora,
             x="hora",
@@ -529,8 +487,6 @@ with col2:
             },
             markers=True
         )
-
-        fig_hora.update_traces(mode='lines+markers', marker=dict(size=5), texttemplate='%{y:,.2f}', textposition='top center')
         st.plotly_chart(fig_hora, use_container_width=True)
 
 
