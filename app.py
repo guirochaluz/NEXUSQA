@@ -374,7 +374,7 @@ def mostrar_dashboard():
     else:
         col2, col3 = st.columns([1, 1])
         de = col2.date_input("🔹 De",  value=data_min, min_value=data_min, max_value=data_max)
-        ate = col3.date_input("🔹 Até", value=data_max, min_value=data_min, max_value=data_max)
+        ate = col3.date_input("🔹 Até", value=data_max, min_value=data_max, max_value=data_max)
 
     # 3) Aplica filtros
     try:
@@ -392,9 +392,7 @@ def mostrar_dashboard():
     df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
 
     # =================== Ajuste de Timezone ===================
-    # Primeiro, define o timezone como UTC para os timestamps "naive"
     df["date_created"] = df["date_created"].dt.tz_localize("UTC")
-    # Converte para o fuso horário de São Paulo
     df["date_created"] = df["date_created"].dt.tz_convert("America/Sao_Paulo")
 
     # 4) Métricas
@@ -410,7 +408,7 @@ def mostrar_dashboard():
     c3.metric("📦 Itens Vendidos", int(total_itens))
     c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
 
-    # =================== Gráfico de Linha e Pizza - Faturamento ===================
+    # =================== Gráfico de Linha e Pizza ===================
     st.markdown("### 💵 Total Vendido por Data e Faturamento por Conta")
     col1, col2 = st.columns(2)
 
@@ -463,6 +461,24 @@ def mostrar_dashboard():
         )
         st.plotly_chart(fig_pizza, use_container_width=True)
 
+    # =================== Gráfico de Barras - Vendas por Dia da Semana ===================
+    st.markdown("### 📅 Vendas por Dia da Semana (Média Real)")
+
+    if not df.empty:
+        df["dia_semana"] = df["date_created"].dt.day_name()
+        vendas_por_dia_semana = (
+            df.groupby("dia_semana")["total_amount"].mean().reindex([
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+            ]).reset_index(name="Valor Médio")
+        )
+        fig_dia_semana = px.bar(
+            vendas_por_dia_semana,
+            x="dia_semana",
+            y="Valor Médio",
+            title="📅 Média Vendida por Dia da Semana"
+        )
+        st.plotly_chart(fig_dia_semana, use_container_width=True)
+
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
     st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
 
@@ -480,12 +496,7 @@ def mostrar_dashboard():
             faturamento_por_hora,
             x="hora",
             y="Valor Médio Acumulado",
-            title="⏰ Média de Faturamento Acumulado por Hora",
-            labels={
-                "hora": "Hora do Dia",
-                "Valor Médio Acumulado": "Valor Médio Acumulado"
-            },
-            markers=True
+            title="⏰ Média de Faturamento Acumulado por Hora"
         )
         st.plotly_chart(fig_hora, use_container_width=True)
 
