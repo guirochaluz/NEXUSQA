@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: nexus-backend
+    name: nexusqa-backend
     env: python
     branch: main
     plan: free
@@ -19,7 +19,7 @@ services:
         value: "https://nexus-dashboard-13ej.onrender.com"
 
   - type: web
-    name: nexus-dashboard
+    name: nexusqa-dashboard
     env: python
     branch: main
     plan: free
