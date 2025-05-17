@@ -193,36 +193,42 @@ def render_sidebar():
 # ================= Páginas =================
 
 def mostrar_dashboard():
-    # ===== CSS customizado para sticky filters e estilo geral =====
-    st.markdown(
-        """
+    # === Oculta header/menu do Streamlit para subir filtros ===
+    st.markdown("""
         <style>
-        /* Sticky container */
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stAppViewContainer {padding-top: 0rem;}
+        </style>
+        """, unsafe_allow_html=True)
+
+    # === CSS para sticky filters e styling ===
+    st.markdown("""
+        <style>
         .sticky-filters {
             position: sticky;
             top: 0;
             background-color: #0e1117;
-            padding: 10px 0;
-            z-index: 100;
+            padding: 8px 0;
+            z-index: 999;
         }
-        /* Espaçamento entre métricas */
-        .metric-container .stMetric {
-            padding: 10px;
+        .sticky-filters .stSelectbox, 
+        .sticky-filters .stDateInput, 
+        .sticky-filters .stButton {
+            margin: 0 8px;
         }
-        /* Título das seções */
         .section-title {
-            margin-top: 20px;
-            margin-bottom: 10px;
-            font-size: 20px;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-size: 1.25rem;
             font-weight: bold;
             color: #2ecc71;
         }
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+        """, unsafe_allow_html=True)
 
-    # Carrega dados brutos para determinar intervalo válido
+    # === Carrega range completo para filtros ===
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
@@ -231,9 +237,9 @@ def mostrar_dashboard():
     data_max = df_full["date_created"].dt.date.max()
     hoje = pd.Timestamp.now().date()
 
-    # ===== Bloco sticky de filtros + botão =====
+    # === Sticky filters: conta, período, de, até e botão sincronizar ===
     st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
-    f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 2, 1])
+    f1, f2, f3, f4, f5 = st.columns([2,2,2,2,1])
     with f1:
         conta_sel = st.selectbox("Conta", ["Todas as contas"] + df_full["nickname"].unique().tolist())
     with f2:
@@ -259,7 +265,7 @@ def mostrar_dashboard():
             st.experimental_rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Aplica filtros e timezone
+    # === Aplica filtros e ajusta timezone ===
     df = carregar_vendas(conta_sel)
     df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
     df["date_created"] = (
@@ -272,23 +278,23 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda no período selecionado.")
         return
 
-    # ===== Métricas principais =====
+    # === Métricas principais com ícones ===
     st.markdown('<div class="section-title">🔢 Métricas</div>', unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4, gap="large")
     total_vendas = len(df)
-    total_valor = df["total_amount"].sum()
-    total_itens = df["quantity"].sum()
+    total_valor  = df["total_amount"].sum()
+    total_itens  = df["quantity"].sum()
     ticket_medio = total_valor / total_vendas if total_vendas else 0
     m1.metric("🧾 Vendas Realizadas", total_vendas)
     m2.metric("💰 Receita Total", format_currency(total_valor))
     m3.metric("📦 Itens Vendidos", total_itens)
     m4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
 
-    # ===== Gráfico de Linha & Pizza =====
+    # === Gráficos linha & pizza lado a lado ===
     st.markdown('<div class="section-title">📈 Análise de Faturamento</div>', unsafe_allow_html=True)
-    c1, c2 = st.columns([4, 1], gap="small")
+    c1, c2 = st.columns([4,1], gap="small")
     with c1:
-        tipo = st.radio("Visão Temporal", ["Diária", "Mensal"], horizontal=True)
+        tipo = st.radio("Visão", ["Diária", "Mensal"], horizontal=True)
         modo = st.radio("Linha", ["Por Conta", "Total Geral"], horizontal=True)
         tmp = df.copy()
         if tipo == "Diária":
@@ -296,71 +302,57 @@ def mostrar_dashboard():
         else:
             tmp["periodo"] = tmp["date_created"].dt.to_period("M").astype(str)
         if modo == "Por Conta":
-            grp = tmp.groupby(["periodo", "nickname"])["total_amount"].sum().reset_index()
+            grp = tmp.groupby(["periodo","nickname"])["total_amount"].sum().reset_index()
             fig_line = px.line(
                 grp,
-                x="periodo",
-                y="total_amount",
-                color="nickname",
-                labels={"periodo": "Data", "total_amount": "Valor", "nickname": "Conta"},
-                color_discrete_sequence=["#2ecc71"]
+                x="periodo", y="total_amount", color="nickname",
+                labels={"periodo":"Data","total_amount":"Valor","nickname":"Conta"},
+                color_discrete_sequence=["#27ae60"]
             )
             fig_line.update_traces(showlegend=False)
         else:
             grp = tmp.groupby("periodo")["total_amount"].sum().reset_index()
             fig_line = px.line(
                 grp,
-                x="periodo",
-                y="total_amount",
-                labels={"periodo": "Data", "total_amount": "Total"},
-                color_discrete_sequence=["#2ecc71"]
+                x="periodo", y="total_amount",
+                labels={"periodo":"Data","total_amount":"Total"},
+                color_discrete_sequence=["#27ae60"]
             )
         st.plotly_chart(fig_line, use_container_width=True, theme="streamlit")
     with c2:
         gp = df.groupby("nickname")["total_amount"].sum().reset_index()
         fig_pie = px.pie(
-            gp,
-            names="nickname",
-            values="total_amount",
+            gp, names="nickname", values="total_amount",
             title="Faturamento por Conta",
-            color_discrete_sequence=px.colors.qualitative.Set2
+            color_discrete_sequence=px.colors.sequential.Greens
         )
         st.plotly_chart(fig_pie, use_container_width=True, theme="streamlit")
 
-    # ===== Gráfico de Barras - Média por Dia da Semana =====
+    # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
-    dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    dias = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
     df["dia"] = df["date_created"].dt.day_name().map({
-        "Monday": "Segunda",
-        "Tuesday": "Terça",
-        "Wednesday": "Quarta",
-        "Thursday": "Quinta",
-        "Friday": "Sexta",
-        "Saturday": "Sábado",
-        "Sunday": "Domingo"
+        "Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
+        "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"
     })
     gb = df.groupby(["dia", df["date_created"].dt.date])["total_amount"].sum().reset_index()
     ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
     fig_bar = px.bar(
-        ab,
-        x="dia",
-        y="total_amount",
-        text_auto=".2s",
-        labels={"dia": "Dia", "total_amount": "Média"},
-        color_discrete_sequence=["#2ecc71"]
+        ab, x="dia", y="total_amount", text_auto=".2s",
+        labels={"dia":"Dia","total_amount":"Média"},
+        color_discrete_sequence=["#27ae60"]
     )
     st.plotly_chart(fig_bar, use_container_width=True, theme="streamlit")
 
-    # ===== Gráfico de Linha - Faturamento Acumulado por Hora =====
-    st.markdown('<div class="section-title">⏰ Faturamento Acumulado por Hora</div>', unsafe_allow_html=True)
+    # === Gráfico linha: Faturamento por hora (original) ===
+    st.markdown('<div class="section-title">⏰ Faturamento por Hora</div>', unsafe_allow_html=True)
     df["hora"] = df["date_created"].dt.hour
-    gh = df.groupby("hora")["total_amount"].mean().cumsum().reset_index(name="Valor Acumulado")
+    gh = df.groupby("hora")["total_amount"].sum().cumsum().reset_index(name="Valor Acumulado")
     fig_hour = px.line(
         gh,
-        x="hora",
-        y="Valor Acumulado",
-        labels={"hora": "Hora", "Valor Acumulado": "Total Acumulado"},
-        color_discrete_sequence=["#2ecc71"]
+        x="hora", y="total_amount",
+        labels={"hora":"Hora","total_amount":"Valor Vendido"},
+        color_discrete_sequence=["#27ae60"]
     )
     st.plotly_chart(fig_hour, use_container_width=True, theme="streamlit")
 
