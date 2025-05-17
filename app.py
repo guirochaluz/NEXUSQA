@@ -313,178 +313,186 @@ def format_currency(value):
     """Formata valores para o padrão brasileiro."""
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+import os
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+from datetime import datetime
+from babel.numbers import format_currency as babel_format
+
+# Carrega variáveis de ambiente
+env_path = os.getenv('DOTENV_PATH', None)
+if env_path:
+    load_dotenv(env_path)
+else:
+    load_dotenv()
+
+# Configuração da conexão com o banco de dados
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
+
+# Configurações de estilo
+COLORS = ['#2ecc71', '#27ae60', '#16a085', '#1abc9c']
+
+# Formatação monetária
+def format_currency(value: float) -> str:
+    try:
+        return babel_format(value, 'BRL', locale='pt_BR')
+    except Exception:
+        return f"R$ {value:,.2f}"
+
+# Carrega vendas, opcional por nickname
+def carregar_vendas(nickname=None) -> pd.DataFrame:
+    query = (
+        "SELECT s.date_created, s.total_amount, s.quantity, u.nickname "
+        "FROM sales s JOIN user_tokens u ON s.ml_user_id = u.ml_user_id"
+    )
+    params = {}
+    if nickname and nickname != "Todas as contas":
+        query += " WHERE u.nickname = :nick"
+        params['nick'] = nickname
+    df = pd.read_sql(text(query), engine, params=params, parse_dates=['date_created'])
+    return df
+
+# Stub para sincronização incremental
+def sync_all_accounts() -> int:
+    # TODO: implementar integração real com ML
+    return 0
+
 def mostrar_dashboard():
+    # Estilos customizados
     st.markdown(
         '''
         <style>
-        .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span {
-            color: #32CD32 !important;
-        }
-        .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
-            color: #32CD32 !important;
-        }
+        .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span { color: #32CD32 !important; }
+        .stDateInput label div[data-testid="stMarkdownContainer"] > div > span { color: #32CD32 !important; }
         </style>
         ''',
         unsafe_allow_html=True
     )
 
-    st.header("📊 Dashboard de Vendas")
-
-    # Botão para sincronização incremental
-    if st.button("🔄 Sincronizar Vendas"):
-        count = sync_all_accounts()
-        st.cache_data.clear()
-        st.success(f"{count} vendas novas sincronizadas com sucesso!")
-        st.rerun()
-
-    # 0) Carrega dados brutos
+    # Carrega dados sem filtros para configurar datas
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
+    data_min = df_full['date_created'].dt.date.min()
+    data_max = df_full['date_created'].dt.date.max()
+    hoje = datetime.now().date()
 
-    # 1) Layout dos filtros
-    col1, col2, col3 = st.columns([2, 2, 2])
-    
-    # Selectbox de Conta
-    contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
-    contas_lst = contas_df["nickname"].astype(str).tolist()
-    escolha    = col1.selectbox("🔹 Conta", ["Todas as contas"] + contas_lst)
-    conta_id   = None if escolha == "Todas as contas" else escolha
-
-    # Selectbox de Filtro Rápido
-    filtro_rapido = col2.selectbox(
-        "🔹 Filtro Rápido",
-        ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"]
+    # Container sticky para filtros e botão
+    st.markdown(
+        '<div style="position:sticky; top:0; background:white; padding:10px; z-index:100">',
+        unsafe_allow_html=True
     )
+    col_acc, col_fast, col_de, col_ate, col_btn = st.columns([2, 2, 2, 2, 1])
 
-    # 2) Ajuste Dinâmico dos Campos de Data
-    data_min = df_full["date_created"].dt.date.min()
-    data_max = df_full["date_created"].dt.date.max()
-    hoje = pd.Timestamp.now().date()
-    
-    if filtro_rapido == "Hoje":
-        de, ate = hoje, hoje
-    elif filtro_rapido == "Últimos 7 Dias":
+    # Filtros
+    with col_acc:
+        escolha = st.selectbox("Conta", ["Todas as contas"] + df_full['nickname'].unique().tolist())
+    with col_fast:
+        filtro = st.selectbox(
+            "Período", ["Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias", "Personalizado"]
+        )
+    # Datas customizadas
+    if filtro == "Hoje":
+        de = ate = hoje
+    elif filtro == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
-    elif filtro_rapido == "Este Mês":
+    elif filtro == "Este Mês":
         de, ate = hoje.replace(day=1), hoje
-    elif filtro_rapido == "Últimos 30 Dias":
+    elif filtro == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
     else:
-        col2, col3 = st.columns([1, 1])
-        de = col2.date_input("🔹 De", value=data_min, min_value=data_min, max_value=data_max)
-        ate = col3.date_input("🔹 Até", value=data_max, min_value=data_min, max_value=data_max)
+        de = col_de.date_input("De", value=data_min, min_value=data_min, max_value=data_max)
+        ate = col_ate.date_input("Até", value=data_max, min_value=data_min, max_value=data_max)
 
-    # 3) Aplica filtros
+    # Botão sincronizar no canto direito
+    with col_btn:
+        if st.button("🔄"):
+            count = sync_all_accounts()
+            st.cache_data.clear()
+            st.success(f"{count} vendas sincronizadas")
+            st.experimental_rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Aplica filtros e timezone
     try:
-        df = carregar_vendas(conta_id)
+        df = carregar_vendas(escolha)
     except Exception as e:
-        st.error(f"Erro ao carregar vendas: {e}")
-        df = pd.DataFrame(columns=["date_created", "total_amount", "quantity"])
-
+        st.error(f"Erro: {e}")
+        return
+    df = df[(df['date_created'].dt.date >= de) & (df['date_created'].dt.date <= ate)]
+    df['date_created'] = (df['date_created'].dt.tz_localize('UTC').dt.tz_convert('America/Sao_Paulo'))
     if df.empty:
-        st.warning("Nenhuma venda encontrada para os filtros selecionados.")
+        st.warning("Nenhuma venda no período selecionado.")
         return
 
-    # Aplica o filtro de data
-    df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
-
-    # =================== Ajuste de Timezone ===================
-    df["date_created"] = df["date_created"].dt.tz_localize("UTC")
-    df["date_created"] = df["date_created"].dt.tz_convert("America/Sao_Paulo")
-
-    # 4) Métricas
+    # Métricas
     total_vendas = len(df)
-    total_valor  = df["total_amount"].sum()
-    total_itens  = df["quantity"].sum()
+    total_valor = df['total_amount'].sum()
+    total_itens = df['quantity'].sum()
     ticket_medio = total_valor / total_vendas if total_vendas else 0
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Vendas", total_vendas)
+    m2.metric("Receita", format_currency(total_valor))
+    m3.metric("Itens", total_itens)
+    m4.metric("Ticket Médio", format_currency(ticket_medio))
 
-    # Exibição das métricas
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🧾 Vendas Realizadas", total_vendas)
-    c2.metric("💰 Receita Total", format_currency(total_valor))
-    c3.metric("📦 Itens Vendidos", int(total_itens))
-    c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
-
-    # =================== Gráfico de Linha e Pizza ===================
-    st.markdown("### 💵 Total Vendido por Data e Faturamento por Conta")
-    col1, col2 = st.columns([4, 1])
-
+    # Gráfico de linha - diário/mensal e modo de linha
+    col1, col2 = st.columns([4,1])
     with col1:
-        tipo_visualizacao = st.radio("Visualização do Gráfico", ["Diária", "Mensal"], horizontal=True)
-        modo_linha       = st.radio("Modo de Linha", ["Por Conta", "Total Acumulado"], horizontal=True)
-
-        # Define período
+        tipo = st.radio("Visão", ["Diária", "Mensal"], horizontal=True)
+        modo = st.radio("Linha", ["Por Conta", "Total Geral"], horizontal=True)
         base = df.copy()
-        if tipo_visualizacao == "Diária":
+        if tipo == "Diária":
             base['periodo'] = base['date_created'].dt.date
         else:
             base['periodo'] = base['date_created'].dt.to_period('M').astype(str)
-
-        # Gera figura
-        if modo_linha == "Por Conta":
-            vendas_linha = (
-                base.groupby(['periodo','nickname'])['total_amount']
-                    .sum().reset_index(name='Valor Total')
-            )
-            titulo = f"💵 Total Vendido por {'Dia' if tipo_visualizacao=='Diária' else 'Mês'} (Por Conta)"
-            fig = px.line(
-                vendas_linha, x='periodo', y='Valor Total', color='nickname',
-                title=titulo, labels={'periodo':'Data','Valor Total':'Valor','nickname':'Conta'},
-                color_discrete_sequence=px.colors.sequential.Greens
-            )
+        if modo == "Por Conta":
+            grp = base.groupby(['periodo','nickname'])['total_amount'].sum().reset_index()
+            fig_line = px.line(grp, x='periodo', y='total_amount', color='nickname',
+                               labels={'periodo':'Data','total_amount':'Valor','nickname':'Conta'},
+                               color_discrete_sequence=COLORS)
+            fig_line.update_traces(showlegend=False)
         else:
-            vendas_total = (
-                base.groupby('periodo')['total_amount']
-                    .sum().reset_index(name='Valor Total')
-            )
-            vendas_total['Valor Total'] = vendas_total['Valor Total'].cumsum()
-            titulo = f"💵 Total Acumulado por {'Dia' if tipo_visualizacao=='Diária' else 'Mês'}"
-            fig = px.line(
-                vendas_total, x='periodo', y='Valor Total',
-                title=titulo, labels={'periodo':'Data','Valor Total':'Acumulado'},
-                color_discrete_sequence=px.colors.sequential.Greens
-            )
-        fig.update_traces(showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-
+            grp = base.groupby('periodo')['total_amount'].sum().reset_index()
+            fig_line = px.line(grp, x='periodo', y='total_amount',
+                               labels={'periodo':'Data','total_amount':'Total'},
+                               color_discrete_sequence=[COLORS[0]])
+        st.plotly_chart(fig_line, use_container_width=True)
+    # Gráfico de pizza - controla legendas
     with col2:
-        st.markdown("### 🥧 Faturamento por Conta")
-        vendas_por_nickname = df.groupby('nickname')['total_amount'].sum().reset_index()
-        fig_pie = px.pie(
-            vendas_por_nickname, values='total_amount', names='nickname',
-            title='📊 Faturamento por Conta', color_discrete_sequence=px.colors.sequential.Greens
-        )
+        grp_pie = df.groupby('nickname')['total_amount'].sum().reset_index()
+        fig_pie = px.pie(grp_pie, names='nickname', values='total_amount',
+                         color_discrete_sequence=COLORS)
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # =================== Gráfico de Barras - Dias da Semana ===================
-    st.markdown("### 📅 Média Vendida por Dia da Semana")
-    dias = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo']
-    df['dia_semana'] = df['date_created'].dt.day_name().map({
-        'Monday':'Segunda-feira','Tuesday':'Terça-feira','Wednesday':'Quarta-feira',
-        'Thursday':'Quinta-feira','Friday':'Sexta-feira','Saturday':'Sábado','Sunday':'Domingo'
+    # Gráfico de barras - dia da semana
+    dias = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']
+    df['dia'] = df['date_created'].dt.day_name().map({
+        'Monday':'Segunda','Tuesday':'Terça','Wednesday':'Quarta',
+        'Thursday':'Quinta','Friday':'Sexta','Saturday':'Sábado','Sunday':'Domingo'
     })
-    vendas_dia = df.groupby(['dia_semana', df['date_created'].dt.date])['total_amount'].sum().reset_index()
-    media_dia = vendas_dia.groupby('dia_semana')['total_amount'].mean().reindex(dias).reset_index(name='Valor Médio')
-    fig_bar = px.bar(
-        media_dia, x='dia_semana', y='Valor Médio', text_auto='.2s',
-        labels={'dia_semana':'Dia','Valor Médio':'Valor Médio'},
-        title='📅 Média vendida por dia da semana', color_discrete_sequence=px.colors.sequential.Greens
-    )
+    grp_bar = df.groupby(['dia', df['date_created'].dt.date])['total_amount'].sum().reset_index()
+    avg_bar = grp_bar.groupby('dia')['total_amount'].mean().reindex(dias).reset_index()
+    fig_bar = px.bar(avg_bar, x='dia', y='total_amount', text_auto=True,
+                     labels={'dia':'Dia','total_amount':'Média'},
+                     color_discrete_sequence=COLORS)
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    # =================== Gráfico de Linha - Faturamento por Hora ===================
-    st.markdown("### ⏰ Média Acumulada por Hora do Dia")
+    # Gráfico de linha - hora do dia
     df['hora'] = df['date_created'].dt.hour
-    faturamento_hora = df.groupby('hora')['total_amount'].mean().cumsum().reset_index(name='Valor Médio Acumulado')
-    fig_hour = px.line(
-        faturamento_hora, x='hora', y='Valor Médio Acumulado',
-        labels={'hora':'Hora','Valor Médio Acumulado':'Valor Acumulado'},
-        title='⏰ Média acumulada de faturamento por hora',
-        color_discrete_sequence=px.colors.sequential.Greens
-    )
+    grp_hour = df.groupby('hora')['total_amount'].mean().reset_index()
+    fig_hour = px.line(grp_hour, x='hora', y='total_amount',
+                       labels={'hora':'Hora','total_amount':'Média'},
+                       color_discrete_sequence=[COLORS[1]])
     st.plotly_chart(fig_hour, use_container_width=True)
+
+if __name__ == '__main__':
+    mostrar_dashboard()
 
 
 def mostrar_contas_cadastradas():
