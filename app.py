@@ -377,16 +377,19 @@ def mostrar_dashboard():
         ate = col3.date_input("🔹 Até", value=data_max, min_value=data_min, max_value=data_max)
 
     # 3) Aplica filtros
+try:
     df = carregar_vendas(conta_id)
+except Exception as e:
+    st.error(f"Erro ao carregar vendas: {e}")
+    df = pd.DataFrame(columns=["date_created", "total_amount", "quantity"])
 
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=["date_created", "total_amount", "quantity"])
-    
+# Verifica se o DataFrame tem dados válidos
+if not df.empty:
     df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
+else:
+    st.warning("Nenhuma venda encontrada para os filtros selecionados.")
+    return
 
-    if df.empty:
-        st.warning("Nenhuma venda encontrada para os filtros selecionados.")
-        return
 
     # =================== Ajuste de Timezone ===================
     # Primeiro, define o timezone como UTC para os timestamps "naive"
