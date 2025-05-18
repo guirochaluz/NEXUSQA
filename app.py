@@ -447,7 +447,7 @@ def mostrar_dashboard():
     c3.metric("📦 Itens Vendidos", int(total_itens))
     c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
     
-import plotly.express as px
+    import plotly.express as px
 
     # =================== Gráfico de Linha - Total Vendido ===================
     # 0) Modo de agregação via radio
