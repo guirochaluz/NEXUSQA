@@ -331,48 +331,56 @@ def mostrar_dashboard():
         unsafe_allow_html=True
     )
 
-    # --- sincronização ---
+    # --- botão de sincronização ---
     if st.button("🔄 Sincronizar Vendas"):
         count = sync_all_accounts()
         st.cache_data.clear()
         st.success(f"{count} vendas novas sincronizadas com sucesso!")
         st.rerun()
 
-    # --- dados ---
+    # --- carrega dados completos ---
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- colunas de filtro ---
+    # --- layout dos filtros em 4 colunas ---
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
-    # --- 1) Contas via expander com título dinâmico ---
+    # 1) Contas via expander com título dinâmico
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
 
-    # o próprio multiselect vai popular st.session_state["contas_ms"]
-    with col1.expander(
-        f"🔹 Contas: "
-        f"{'Todas as contas' if st.session_state.get('contas_ms', contas_lst)==contas_lst else f'{len(st.session_state.get('contas_ms', []))} selecionada(s)'}",
-        expanded=False
-    ):
+    # inicializa session_state apenas na primeira vez
+    st.session_state.setdefault("contas_ms", contas_lst.copy())
+    selecionadas = st.session_state.contas_ms
+
+    # monta o label do expander fora do f-string complexo
+    if len(selecionadas) == len(contas_lst):
+        expander_label = "🔹 Contas: Todas as contas"
+    else:
+        expander_label = f"🔹 Contas: {len(selecionadas)} selecionada(s)"
+
+    # expander (único widget em col1) para manter alinhamento
+    with col1.expander(expander_label, expanded=False):
         st.multiselect(
             "Selecione as contas",
             options=contas_lst,
-            default=st.session_state.get("contas_ms", contas_lst),
+            default=selecionadas,
             key="contas_ms"
         )
-    selecionadas = st.session_state.get("contas_ms", contas_lst)
 
-    # --- 2) Filtro Rápido ---
+    # depois do expander, pega a lista atualizada
+    selecionadas = st.session_state.contas_ms
+
+    # 2) Filtro Rápido
     filtro_rapido = col2.selectbox(
         "🔹 Filtro Rápido",
         ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"],
         key="filtro_quick"
     )
 
-    # --- 3) Datas ---
+    # 3) Limites de data
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
@@ -388,6 +396,7 @@ def mostrar_dashboard():
     else:
         de, ate = data_min, data_max
 
+    # 4) Date inputs
     is_custom = (filtro_rapido == "Período Personalizado")
     de = col3.date_input(
         "🔹 De",
@@ -406,10 +415,14 @@ def mostrar_dashboard():
         key="ate_q"
     )
 
-    # --- 4) Aplica filtros ---
+    # --- aplica todos os filtros ---
     df = carregar_vendas(None)
+
+    # filtra por contas selecionadas
     if selecionadas:
         df = df[df["nickname"].isin(selecionadas)]
+
+    # filtra por período
     df = df[
         (df["date_created"].dt.date >= de) &
         (df["date_created"].dt.date <= ate)
