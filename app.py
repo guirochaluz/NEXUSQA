@@ -635,6 +635,10 @@ def mostrar_gestao_despesas():
 def mostrar_painel_metas():
     st.header("🎯 Painel de Metas")
     st.info("Em breve...")
+    
+def mostrar_anuncios():
+    st.header("🎯 Análise de Anúncios")
+    st.info("Em breve...")
 
 # ----------------- Fluxo Principal -----------------
 if "code" in st.query_params:
@@ -655,3 +659,5 @@ elif pagina == "Gestão de Despesas":
     mostrar_gestao_despesas()
 elif pagina == "Painel de Metas":
     mostrar_painel_metas()
+elif pagina == "Gestão de Anúncios":
+    mostrar_anuncios()
