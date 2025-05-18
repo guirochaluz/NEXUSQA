@@ -358,30 +358,42 @@ def mostrar_dashboard():
     # --- linha única de filtros: Quick-Filter | De | Até ---
     col1, col2, col3 = st.columns([2, 1.5, 1.5])
 
-    # 1) Filtro Rápido
+        # 1) Filtro Rápido (incluindo “Ontem”)
     filtro_rapido = col1.selectbox(
         "🔹 Filtro Rápido",
-        ["Período Personalizado", "Hoje", "Ontem", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"],
+        [
+            "Período Personalizado",
+            "Hoje",
+            "Ontem",
+            "Últimos 7 Dias",
+            "Este Mês",
+            "Últimos 30 Dias"
+        ],
         key="filtro_quick"
     )
-
-    # 2) Determina intervalos de data
+    
+    # 2) Determina intervalos de data (com “Ontem”)
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
-
+    
     if filtro_rapido == "Hoje":
         de, ate = hoje, hoje
+    
     elif filtro_rapido == "Ontem":
-    ontem = hoje - pd.Timedelta(days=1)
-    de, ate = ontem, ontem
+        ontem = hoje - pd.Timedelta(days=1)
+        de, ate = ontem, ontem
+    
     elif filtro_rapido == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
+    
     elif filtro_rapido == "Este Mês":
         de, ate = hoje.replace(day=1), hoje
+    
     elif filtro_rapido == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
-    else:
+    
+    else:  # Período Personalizado
         de, ate = data_min, data_max
 
     # 3) Date inputs (sempre visíveis, mas desabilitados se não for personalizado)
