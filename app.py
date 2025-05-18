@@ -459,7 +459,7 @@ def mostrar_dashboard():
     )
     
     # 1) Frequência: diária ou mensal
-        tipo_visualizacao = st.radio(
+    tipo_visualizacao = st.radio(
         "Visualização do Gráfico",
         ["Diária", "Mensal"],
         horizontal=True,
