@@ -341,31 +341,6 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    st.markdown(
-        """
-        <style>
-          /* Alvo o container real do Streamlit multiselect: data-testid="multiselect" */
-          [data-testid="multiselect"] .react-select__multi-value {
-            background-color: #32CD32 !important;
-          }
-          [data-testid="multiselect"] .react-select__multi-value__label,
-          [data-testid="multiselect"] .react-select__multi-value__remove {
-            color: white !important;
-            font-weight: bold;
-          }
-    
-          /* Fallback para classes dinâmicas que contenham “multiValue” */
-          [data-testid="multiselect"] [class*="multiValue"] {
-            background-color: #32CD32 !important;
-          }
-          [data-testid="multiselect"] [class*="multiValue"] span {
-            color: white !important;
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
     # --- filtro discreto de Contas no topo ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
@@ -386,7 +361,7 @@ def mostrar_dashboard():
     # 1) Filtro Rápido
     filtro_rapido = col1.selectbox(
         "🔹 Filtro Rápido",
-        ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"],
+        ["Período Personalizado", "Hoje", "Ontem", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"],
         key="filtro_quick"
     )
 
@@ -397,6 +372,9 @@ def mostrar_dashboard():
 
     if filtro_rapido == "Hoje":
         de, ate = hoje, hoje
+    elif filtro_rapido == "Ontem":
+    ontem = hoje - pd.Timedelta(days=1)
+    de, ate = ontem, ontem
     elif filtro_rapido == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
     elif filtro_rapido == "Este Mês":
