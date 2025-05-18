@@ -470,11 +470,13 @@ def mostrar_dashboard():
     # 2) Prepara e agrega os dados
     df_plot = df.copy()
     
-    if filtro_rapido == "Hoje":
+    # agrupa por hora sempre que o período for um único dia
+    if de == ate:
         df_plot["date_hour"] = df_plot["date_created"].dt.floor("H")
         eixo_x = "date_hour"
         periodo_label = "Hora"
     else:
+        # mais de um dia: usa o seletor Diário/Mensal
         if tipo_visualizacao == "Diário":
             df_plot["date_created"] = df_plot["date_created"].dt.date
             eixo_x = "date_created"
