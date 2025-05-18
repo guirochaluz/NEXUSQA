@@ -454,15 +454,15 @@ def mostrar_dashboard():
     title_placeholder = col_title.empty()
     
     modo_agregacao = col_visao.radio(
-        "👁️",
+        "Agrupamento",
         ["Por Conta", "Total Geral"],
         horizontal=True,
         key="modo_agregacao"
     )
     
     tipo_visualizacao = col_periodo.radio(
-        "📊",
-        ["Diária", "Mensal"],
+        "Período",
+        ["Diário", "Mensal"],
         horizontal=True,
         key="periodo"
     )
