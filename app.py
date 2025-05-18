@@ -469,7 +469,7 @@ def mostrar_dashboard():
     
     # 2) Prepara e agrega os dados
     df_plot = df.copy()
-    if tipo_visualizacao == "Diária":
+    if tipo_visualizacao == "Diário":
         df_plot["date_created"] = df_plot["date_created"].dt.date
         eixo_x = "date_created"
         periodo_label = "Dia"
