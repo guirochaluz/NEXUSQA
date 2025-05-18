@@ -342,21 +342,29 @@ def mostrar_dashboard():
         return
 
     st.markdown(
-    """
-    <style>
-    /* tor­na os pills do multiselect verdes */
-    [data-testid="stMultiSelect"] .react-select__multi-value {
-      background-color: #32CD32 !important;
-    }
-    /* texto e “X” em branco para contraste */
-    [data-testid="stMultiSelect"] .react-select__multi-value__label,
-    [data-testid="stMultiSelect"] .react-select__multi-value__remove {
-      color: white !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        """
+        <style>
+          /* Alvo o container real do Streamlit multiselect: data-testid="multiselect" */
+          [data-testid="multiselect"] .react-select__multi-value {
+            background-color: #32CD32 !important;
+          }
+          [data-testid="multiselect"] .react-select__multi-value__label,
+          [data-testid="multiselect"] .react-select__multi-value__remove {
+            color: white !important;
+            font-weight: bold;
+          }
+    
+          /* Fallback para classes dinâmicas que contenham “multiValue” */
+          [data-testid="multiselect"] [class*="multiValue"] {
+            background-color: #32CD32 !important;
+          }
+          [data-testid="multiselect"] [class*="multiValue"] span {
+            color: white !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # --- filtro discreto de Contas no topo ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
