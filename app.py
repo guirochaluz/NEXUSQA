@@ -449,7 +449,7 @@ def mostrar_dashboard():
     
     import plotly.express as px
 
-            # =================== Gráfico de Linha - Total Vendido ===================
+    # =================== Gráfico de Linha - Total Vendido ===================
     col_title, col_visao, col_periodo = st.columns([8, 1, 1])
     title_placeholder = col_title.empty()
     
@@ -469,15 +469,22 @@ def mostrar_dashboard():
     
     # 2) Prepara e agrega os dados
     df_plot = df.copy()
-    if tipo_visualizacao == "Diário":
-        df_plot["date_created"] = df_plot["date_created"].dt.date
-        eixo_x = "date_created"
-        periodo_label = "Dia"
-    else:
-        df_plot["date_created"] = df_plot["date_created"].dt.to_period("M").astype(str)
-        eixo_x = "date_created"
-        periodo_label = "Mês"
     
+    if filtro_rapido == "Hoje":
+        df_plot["date_hour"] = df_plot["date_created"].dt.floor("H")
+        eixo_x = "date_hour"
+        periodo_label = "Hora"
+    else:
+        if tipo_visualizacao == "Diário":
+            df_plot["date_created"] = df_plot["date_created"].dt.date
+            eixo_x = "date_created"
+            periodo_label = "Dia"
+        else:
+            df_plot["date_created"] = df_plot["date_created"].dt.to_period("M").astype(str)
+            eixo_x = "date_created"
+            periodo_label = "Mês"
+    
+    # aplica agregação comum
     if modo_agregacao == "Por Conta":
         vendas_por_data = (
             df_plot
@@ -485,7 +492,6 @@ def mostrar_dashboard():
             .sum()
             .reset_index(name="Valor Total")
         )
-        titulo = f"💵 Total Vendido por {periodo_label} (Linha por Nickname)"
         color_dim = "nickname"
         color_seq = px.colors.sequential.Agsunset
     else:
@@ -495,9 +501,12 @@ def mostrar_dashboard():
             .sum()
             .reset_index(name="Valor Total")
         )
-        titulo = f"💵 Total Vendido por {periodo_label} (Soma Total)"
         color_dim = None
         color_seq = ["#27ae60"]
+    
+    titulo = f"💵 Total Vendido por {periodo_label} " + (
+        "(Linha por Nickname)" if modo_agregacao=="Por Conta" else "(Soma Total)"
+    )
     
     # 3) Atualiza o título
     title_placeholder.markdown(f"### {titulo}")
@@ -517,10 +526,10 @@ def mostrar_dashboard():
         texttemplate="%{y:,.2f}",
         textposition="top center"
     )
-    # garante um pouco mais de espaço em cima para o header
     fig.update_layout(margin=dict(t=30, b=20, l=40, r=10))
     
     st.plotly_chart(fig, use_container_width=True)
+
 
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
