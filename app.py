@@ -326,7 +326,7 @@ def mostrar_dashboard():
     )
 
     # --- estilo customizado para labels verdes ---
-    st.markdown(
+        st.markdown(
         '''
         <style>
         .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
