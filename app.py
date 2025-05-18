@@ -368,7 +368,7 @@ def mostrar_dashboard():
             "Últimos 7 Dias",
             "Este Mês",
             "Últimos 30 Dias"
-        ],
+        ], index = 1,
         key="filtro_quick"
     )
     
