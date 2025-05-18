@@ -344,6 +344,20 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda cadastrada.")
         return
 
+    # --- filtro discreto de Contas no topo ---
+    contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
+    contas_lst = contas_df["nickname"].astype(str).tolist()
+    selecionadas = st.multiselect(
+        "🔹 Contas (opcional)",
+        options=contas_lst,
+        default=contas_lst,
+        key="contas_ms",
+        help="Filtre por uma ou mais contas; deixe todas selecionadas para não filtrar."
+    )
+    # aplica filtro de contas
+    if selecionadas:
+        df_full = df_full[df_full["nickname"].isin(selecionadas)]
+
     # --- linha única de filtros: Quick-Filter | De | Até ---
     col1, col2, col3 = st.columns([2, 1.5, 1.5])
 
@@ -354,7 +368,7 @@ def mostrar_dashboard():
         key="filtro_quick"
     )
 
-    # 2) Calcula limites
+    # 2) Determina intervalos de data
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
@@ -370,14 +384,14 @@ def mostrar_dashboard():
     else:
         de, ate = data_min, data_max
 
-    # 3) Date inputs (sempre visíveis, mas disabled se não for personalizado)
-    is_custom = (filtro_rapido == "Período Personalizado")
+    # 3) Date inputs (sempre visíveis, mas desabilitados se não for personalizado)
+    custom = (filtro_rapido == "Período Personalizado")
     de = col2.date_input(
         "🔹 De",
         value=de,
         min_value=data_min,
         max_value=data_max,
-        disabled=not is_custom,
+        disabled=not custom,
         key="de_q"
     )
     ate = col3.date_input(
@@ -385,15 +399,14 @@ def mostrar_dashboard():
         value=ate,
         min_value=data_min,
         max_value=data_max,
-        disabled=not is_custom,
+        disabled=not custom,
         key="ate_q"
     )
 
-    # --- aplica filtros no DataFrame ---
-    df = df_full.copy()
-    df = df[
-        (df["date_created"].dt.date >= de) &
-        (df["date_created"].dt.date <= ate)
+    # --- aplica filtro de datas ---
+    df = df_full[
+        (df_full["date_created"].dt.date >= de) &
+        (df_full["date_created"].dt.date <= ate)
     ]
 
     if df.empty:
