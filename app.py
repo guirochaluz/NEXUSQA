@@ -341,6 +341,23 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda cadastrada.")
         return
 
+    st.markdown(
+    """
+    <style>
+    /* tor­na os pills do multiselect verdes */
+    [data-testid="stMultiSelect"] .react-select__multi-value {
+      background-color: #32CD32 !important;
+    }
+    /* texto e “X” em branco para contraste */
+    [data-testid="stMultiSelect"] .react-select__multi-value__label,
+    [data-testid="stMultiSelect"] .react-select__multi-value__remove {
+      color: white !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
     # --- filtro discreto de Contas no topo ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
