@@ -351,27 +351,28 @@ def mostrar_dashboard():
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
 
-    # inicializa seleção no session_state
+    # inicializa no session_state (apenas na primeira vez)
     if "contas_ms" not in st.session_state:
-        st.session_state["contas_ms"] = contas_lst.copy()
-    selecionadas = st.session_state["contas_ms"]
+        st.session_state.contas_ms = contas_lst.copy()
 
-    # monta texto resumido
+    # monta o texto resumido
+    selecionadas = st.session_state.contas_ms
     if len(selecionadas) == len(contas_lst):
         display = "Todas as contas"
     else:
         display = f"{len(selecionadas)} selecionada(s)"
     col1.markdown(f"**🔹 Contas:** {display}")
 
-    # expander para alterar seleção
+    # expander para alterar a seleção — sem atribuir em session_state diretamente
     with col1.expander("Alterar Contas", expanded=False):
-        st.session_state["contas_ms"] = st.multiselect(
+        st.multiselect(
             "🔹 Contas",
             options=contas_lst,
             default=selecionadas,
             key="contas_ms"
         )
-        selecionadas = st.session_state["contas_ms"]
+    # após o expander, o session_state já foi atualizado automaticamente
+    selecionadas = st.session_state.contas_ms
 
     # 2) Filtro Rápido
     filtro_rapido = col2.selectbox(
