@@ -318,11 +318,12 @@ def mostrar_dashboard():
     import pandas as pd
     from sqlalchemy import text
 
-    # --- estilo customizado ---
+    # --- CSS para labels verdes ---
     st.markdown(
         '''
         <style>
         .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
+        .stTextInput label div[data-testid="stMarkdownContainer"] > div > span,
         .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
             color: #32CD32 !important;
         }
@@ -331,56 +332,52 @@ def mostrar_dashboard():
         unsafe_allow_html=True
     )
 
-    # --- botão de sincronização ---
+    # --- sincronização ---
     if st.button("🔄 Sincronizar Vendas"):
         count = sync_all_accounts()
         st.cache_data.clear()
         st.success(f"{count} vendas novas sincronizadas com sucesso!")
         st.rerun()
 
-    # --- carrega dados completos ---
+    # --- carrega dados ---
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- layout dos filtros em 4 colunas ---
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-
-    # 1) Contas via expander com título dinâmico
+    # --- prepara lista de contas ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
 
-    # inicializa session_state apenas na primeira vez
+    # inicializa no session_state
     st.session_state.setdefault("contas_ms", contas_lst.copy())
     selecionadas = st.session_state.contas_ms
 
-    # monta o label do expander fora do f-string complexo
+    # monta o resumo que vai na linha de filtros
     if len(selecionadas) == len(contas_lst):
-        expander_label = "🔹 Contas: Todas as contas"
+        resumo = "Todas as contas"
     else:
-        expander_label = f"🔹 Contas: {len(selecionadas)} selecionada(s)"
+        resumo = ", ".join(selecionadas)
 
-    # expander (único widget em col1) para manter alinhamento
-    with col1.expander(expander_label, expanded=False):
-        st.multiselect(
-            "Selecione as contas",
-            options=contas_lst,
-            default=selecionadas,
-            key="contas_ms"
-        )
+    # --- linha de filtros: resumo, rápido, de, até ---
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
-    # depois do expander, pega a lista atualizada
-    selecionadas = st.session_state.contas_ms
+    # 1) resumo no text_input (disabled) para alinhar perfeitamente
+    col1.text_input(
+        "🔹 Contas",
+        value=resumo,
+        disabled=True,
+        key="contas_preview"
+    )
 
-    # 2) Filtro Rápido
+    # 2) filtro rápido
     filtro_rapido = col2.selectbox(
         "🔹 Filtro Rápido",
         ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"],
         key="filtro_quick"
     )
 
-    # 3) Limites de data
+    # 3) cálcula datas
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
@@ -396,7 +393,7 @@ def mostrar_dashboard():
     else:
         de, ate = data_min, data_max
 
-    # 4) Date inputs
+    # 4) date_inputs
     is_custom = (filtro_rapido == "Período Personalizado")
     de = col3.date_input(
         "🔹 De",
@@ -415,14 +412,22 @@ def mostrar_dashboard():
         key="ate_q"
     )
 
-    # --- aplica todos os filtros ---
-    df = carregar_vendas(None)
+    # --- expander abaixo da linha de filtros para alterar contas ---
+    with st.expander("Alterar Contas", expanded=False):
+        # esse multiselect atualiza st.session_state.contas_ms
+        st.multiselect(
+            "🔹 Selecione as contas",
+            options=contas_lst,
+            default=selecionadas,
+            key="contas_ms"
+        )
+        # atualiza o resumo imediatamente
+        selecionadas = st.session_state.contas_ms
 
-    # filtra por contas selecionadas
+    # --- aplica filtros ---
+    df = carregar_vendas(None)
     if selecionadas:
         df = df[df["nickname"].isin(selecionadas)]
-
-    # filtra por período
     df = df[
         (df["date_created"].dt.date >= de) &
         (df["date_created"].dt.date <= ate)
