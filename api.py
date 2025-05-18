@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from auth.oauth import get_auth_url, exchange_code, renovar_access_token
+from oauth import get_auth_url, exchange_code, renovar_access_token
 from sales import get_full_sales as get_sales
 
 # Carrega variáveis de ambiente
