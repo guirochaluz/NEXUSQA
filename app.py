@@ -448,38 +448,92 @@ def mostrar_dashboard():
     c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
     
     # =================== Gráfico de Linha - Total Vendido ===================
-    tipo_visualizacao = st.radio("Visualização do Gráfico", ["Diária", "Mensal"], horizontal=True)
-
+    # 0) Escolha de agregação: por conta ou total geral
+    modo_agregacao = st.selectbox(
+        "👁️ Visão da Linha",
+        ["Por Conta", "Total Geral"],
+        index=0,
+        help="Escolha se quer uma linha para cada nickname ou apenas a soma total"
+    )
+    
+    # 1) Frequência: diária ou mensal
+    tipo_visualizacao = st.radio(
+        "Visualização do Gráfico",
+        ["Diária", "Mensal"],
+        horizontal=True
+    )
+    
+    # 2) Monta o DataFrame de vendas conforme as escolhas
     if tipo_visualizacao == "Diária":
-        vendas_por_data = (
-            df
-            .groupby([df["date_created"].dt.date, "nickname"])["total_amount"]
-            .sum()
-            .reset_index(name="Valor Total")
-        )
+        eixo_x = df["date_created"].dt.date.name = "date_created"
+        if modo_agregacao == "Por Conta":
+            vendas_por_data = (
+                df
+                .groupby([df["date_created"].dt.date, "nickname"])["total_amount"]
+                .sum()
+                .reset_index(name="Valor Total")
+            )
+            titulo = "💵 Total Vendido por Dia (Linha por Nickname)"
+            color = "nickname"
+        else:  # Total Geral
+            vendas_por_data = (
+                df
+                .groupby(df["date_created"].dt.date)["total_amount"]
+                .sum()
+                .reset_index(name="Valor Total")
+            )
+            titulo = "💵 Total Vendido por Dia (Soma Total)"
+            color = None
+    
+    elif tipo_visualizacao == "Mensal":
+        # converte para período M
+        periodo = df["date_created"].dt.to_period("M")
         eixo_x = "date_created"
-        titulo_grafico = "💵 Total Vendido por Dia (Linha por Nickname)"
-    else:
-        vendas_por_data = (
-            df
-            .groupby([df["date_created"].dt.to_period("M"), "nickname"])["total_amount"]
-            .sum()
-            .reset_index(name="Valor Total")
-        )
-        vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
-        eixo_x = "date_created"
-        titulo_grafico = "💵 Total Vendido por Mês (Linha por Nickname)"
-
+        if modo_agregacao == "Por Conta":
+            vendas_por_data = (
+                df
+                .groupby([periodo, "nickname"])["total_amount"]
+                .sum()
+                .reset_index(name="Valor Total")
+            )
+            vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
+            titulo = "💵 Total Vendido por Mês (Linha por Nickname)"
+            color = "nickname"
+        else:
+            vendas_por_data = (
+                df
+                .groupby(periodo)["total_amount"]
+                .sum()
+                .reset_index(name="Valor Total")
+            )
+            vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
+            titulo = "💵 Total Vendido por Mês (Soma Total)"
+            color = None
+    
+    # 3) Plot
+    import plotly.express as px
+    
     fig = px.line(
         vendas_por_data,
         x=eixo_x,
         y="Valor Total",
-        color="nickname",
-        title=titulo_grafico,
-        labels={"Valor Total": "Valor Total", "date_created": "Data", "nickname": "Conta"},
+        color=color,
+        title=titulo,
+        labels={
+            "Valor Total": "Valor Total",
+            "date_created": "Data",
+            "nickname": "Conta"
+        },
         color_discrete_sequence=px.colors.sequential.Agsunset
     )
-    fig.update_traces(mode='lines+markers', marker=dict(size=5), texttemplate='%{y:,.2f}', textposition='top center')
+    
+    fig.update_traces(
+        mode='lines+markers',
+        marker=dict(size=5),
+        texttemplate='%{y:,.2f}',
+        textposition='top center'
+    )
+    
     st.plotly_chart(fig, use_container_width=True)
 
     # === Gráfico de barras: Média por dia da semana ===
