@@ -328,8 +328,6 @@ def mostrar_dashboard():
         unsafe_allow_html=True
     )
 
-    st.header("📊 Dashboard de Vendas")
-
     # Botão para sincronização incremental
     if st.button("🔄 Sincronizar Vendas"):
         count = sync_all_accounts()
@@ -541,9 +539,6 @@ def mostrar_expedicao_logistica():
     st.header("🚚 Expedição e Logística")
     st.info("Em breve...")
 
-def mostrar_relatorios():
-    st.header("📑 Relatórios")
-    st.info("Em breve...")
 
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
