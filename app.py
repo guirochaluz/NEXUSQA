@@ -331,57 +331,48 @@ def mostrar_dashboard():
         unsafe_allow_html=True
     )
 
-    # --- botão de sincronização ---
+    # --- sincronização ---
     if st.button("🔄 Sincronizar Vendas"):
         count = sync_all_accounts()
         st.cache_data.clear()
         st.success(f"{count} vendas novas sincronizadas com sucesso!")
         st.rerun()
 
-    # --- carrega dados completos ---
+    # --- dados ---
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- layout dos filtros em 4 colunas ---
+    # --- colunas de filtro ---
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
-    # 1) Contas: texto + expander com multiselect
+    # --- 1) Contas via expander com título dinâmico ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
 
-    # inicializa no session_state (apenas na primeira vez)
-    if "contas_ms" not in st.session_state:
-        st.session_state.contas_ms = contas_lst.copy()
-
-    # monta o texto resumido
-    selecionadas = st.session_state.contas_ms
-    if len(selecionadas) == len(contas_lst):
-        display = "Todas as contas"
-    else:
-        display = f"{len(selecionadas)} selecionada(s)"
-    col1.markdown(f"**🔹 Contas:** {display}")
-
-    # expander para alterar a seleção — sem atribuir em session_state diretamente
-    with col1.expander("Alterar Contas", expanded=False):
+    # o próprio multiselect vai popular st.session_state["contas_ms"]
+    with col1.expander(
+        f"🔹 Contas: "
+        f"{'Todas as contas' if st.session_state.get('contas_ms', contas_lst)==contas_lst else f'{len(st.session_state.get('contas_ms', []))} selecionada(s)'}",
+        expanded=False
+    ):
         st.multiselect(
-            "🔹 Contas",
+            "Selecione as contas",
             options=contas_lst,
-            default=selecionadas,
+            default=st.session_state.get("contas_ms", contas_lst),
             key="contas_ms"
         )
-    # após o expander, o session_state já foi atualizado automaticamente
-    selecionadas = st.session_state.contas_ms
+    selecionadas = st.session_state.get("contas_ms", contas_lst)
 
-    # 2) Filtro Rápido
+    # --- 2) Filtro Rápido ---
     filtro_rapido = col2.selectbox(
         "🔹 Filtro Rápido",
         ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"],
         key="filtro_quick"
     )
 
-    # 3) Calcula limites para datas
+    # --- 3) Datas ---
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
@@ -397,7 +388,6 @@ def mostrar_dashboard():
     else:
         de, ate = data_min, data_max
 
-    # 4) Date inputs sempre visíveis, mas desabilitados quando não é personalizado
     is_custom = (filtro_rapido == "Período Personalizado")
     de = col3.date_input(
         "🔹 De",
@@ -416,14 +406,10 @@ def mostrar_dashboard():
         key="ate_q"
     )
 
-    # --- aplica todos os filtros ---
+    # --- 4) Aplica filtros ---
     df = carregar_vendas(None)
-
-    # filtra por contas selecionadas
     if selecionadas:
         df = df[df["nickname"].isin(selecionadas)]
-
-    # filtra por período
     df = df[
         (df["date_created"].dt.date >= de) &
         (df["date_created"].dt.date <= ate)
@@ -432,6 +418,7 @@ def mostrar_dashboard():
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
         return
+
 
     # =================== Ajuste de Timezone ===================
     # Primeiro, define o timezone como UTC para os timestamps "naive"
