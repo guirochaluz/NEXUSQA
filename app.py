@@ -311,9 +311,19 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def mostrar_dashboard():
-    import streamlit as st
-    import pandas as pd
-    from sqlalchemy import text
+
+        st.markdown(
+        """
+        <style>
+            header {display: none;}          /* remove a faixa preta superior */
+            #MainMenu {visibility: hidden;}  /* esconde o menu de três pontinhos */
+            footer {display: none;}          /* remove o rodapé “Made with Streamlit” */
+            /* reduz o padding-top padrão */
+            .css-18e3th9 {padding-top: 0rem !important;}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
     # --- estilo customizado para labels verdes ---
     st.markdown(
