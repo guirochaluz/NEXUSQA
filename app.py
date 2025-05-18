@@ -447,84 +447,93 @@ def mostrar_dashboard():
     c3.metric("📦 Itens Vendidos", int(total_itens))
     c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
     
+import plotly.express as px
+
     # =================== Gráfico de Linha - Total Vendido ===================
-    # 0) Escolha de agregação: por conta ou total geral
-    modo_agregacao = st.selectbox(
+    # 0) Modo de agregação via radio
+    modo_agregacao = st.radio(
         "👁️ Visão da Linha",
         ["Por Conta", "Total Geral"],
-        index=0,
-        help="Escolha se quer uma linha para cada nickname ou apenas a soma total"
+        horizontal=True,
+        key="modo_agregacao"
     )
     
     # 1) Frequência: diária ou mensal
     tipo_visualizacao = st.radio(
         "Visualização do Gráfico",
         ["Diária", "Mensal"],
-        horizontal=True
+        horizontal=True,
+        key="filtro_quick"
     )
     
-    # 2) Monta o DataFrame de vendas conforme as escolhas
+    # 2) Prepara eixo X e agrupamentos
     if tipo_visualizacao == "Diária":
-        eixo_x = df["date_created"].dt.date.name = "date_created"
+        eixo_x = "date_created"
+        df_plot = df.copy()
+        df_plot["date_created"] = df_plot["date_created"].dt.date
+    
         if modo_agregacao == "Por Conta":
             vendas_por_data = (
-                df
-                .groupby([df["date_created"].dt.date, "nickname"])["total_amount"]
+                df_plot
+                .groupby(["date_created", "nickname"])["total_amount"]
                 .sum()
                 .reset_index(name="Valor Total")
             )
             titulo = "💵 Total Vendido por Dia (Linha por Nickname)"
-            color = "nickname"
+            color_dim = "nickname"
+            color_seq = px.colors.sequential.Agsunset
+    
         else:  # Total Geral
             vendas_por_data = (
-                df
-                .groupby(df["date_created"].dt.date)["total_amount"]
+                df_plot
+                .groupby("date_created")["total_amount"]
                 .sum()
                 .reset_index(name="Valor Total")
             )
             titulo = "💵 Total Vendido por Dia (Soma Total)"
-            color = None
+            color_dim = None
+            color_seq = ["#27ae60"]
     
     elif tipo_visualizacao == "Mensal":
-        # converte para período M
-        periodo = df["date_created"].dt.to_period("M")
         eixo_x = "date_created"
+        df_plot = df.copy()
+        df_plot["date_created"] = df_plot["date_created"].dt.to_period("M").astype(str)
+    
         if modo_agregacao == "Por Conta":
             vendas_por_data = (
-                df
-                .groupby([periodo, "nickname"])["total_amount"]
+                df_plot
+                .groupby(["date_created", "nickname"])["total_amount"]
                 .sum()
                 .reset_index(name="Valor Total")
             )
-            vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
             titulo = "💵 Total Vendido por Mês (Linha por Nickname)"
-            color = "nickname"
-        else:
+            color_dim = "nickname"
+            color_seq = px.colors.sequential.Agsunset
+    
+        else:  # Total Geral
             vendas_por_data = (
-                df
-                .groupby(periodo)["total_amount"]
+                df_plot
+                .groupby("date_created")["total_amount"]
                 .sum()
                 .reset_index(name="Valor Total")
             )
-            vendas_por_data["date_created"] = vendas_por_data["date_created"].astype(str)
             titulo = "💵 Total Vendido por Mês (Soma Total)"
-            color = None
+            color_dim = None
+            color_seq = ["#27ae60"]
     
-    # 3) Plot
-    import plotly.express as px
-    
+    # 3) Desenha o gráfico
     fig = px.line(
         vendas_por_data,
         x=eixo_x,
         y="Valor Total",
-        color=color,
+        color=color_dim,
         title=titulo,
         labels={
             "Valor Total": "Valor Total",
             "date_created": "Data",
             "nickname": "Conta"
         },
-        color_discrete_sequence=px.colors.sequential.Agsunset
+        color_discrete_sequence=color_seq
     )
     
     fig.update_traces(
