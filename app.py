@@ -8,10 +8,7 @@ from dotenv import load_dotenv
 import locale
 from streamlit_option_menu import option_menu
 from typing import Optional
-from sales import sync_all_accounts
-from datetime import datetime
-import pytz
-
+from ml.sales import sync_all_accounts
 
 # Tenta configurar locale pt_BR; guarda se deu certo
 try:
@@ -314,161 +311,163 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def mostrar_dashboard():
+    import streamlit as st
+    import pandas as pd
+    from sqlalchemy import text
 
-    # fuso SP
-    tz_sp = pytz.timezone("America/Sao_Paulo")
-
-    # --- CSS para compactar e colorir labels ---
+    # --- estilo customizado para labels verdes ---
     st.markdown(
-        """
+        '''
         <style>
-        /* labels verdes */
-        .stSelectbox label span,
-        .stDateInput label span,
-        .stMultiSelect label span,
-        .stRadio label span {
+        .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
+        .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
             color: #32CD32 !important;
         }
-        /* reduzir margens/paddings */
-        .stMultiSelect, .stSelectbox, .stRadio, .stDateInput, .stButton {
-            margin-right: 4px;
-            padding: 2px 4px;
-        }
-        /* badge contas */
-        .badge-contas {
-          background-color: #27ae60;
-          color: white;
-          padding: 4px 8px;
-          border-radius: 12px;
-          font-size: 0.9rem;
-        }
         </style>
-        """,
+        ''',
         unsafe_allow_html=True
     )
 
-    # --- carrega dados e botão de sync ---
+    # --- botão de sincronização ---
+    if st.button("🔄 Sincronizar Vendas"):
+        count = sync_all_accounts()
+        st.cache_data.clear()
+        st.success(f"{count} vendas novas sincronizadas com sucesso!")
+        st.rerun()
+
+    # --- carrega todos os dados ---
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # define colunas do cabeçalho
-    (
-        sync_col,
-        contas_col,
-        modo_col,
-        gran_col,
-        search_col,
-        quick_col,
-        de_col,
-        ate_col,
-        clear_col
-    ) = st.columns([0.4, 1.4, 1, 1, 2, 1.2, 1, 1, 0.4])
-
-    # 2) Sync + hora da última execução
-    if sync_col.button("🔄", help="Sincronizar Vendas"):
-        count = sync_all_accounts()
-        st.cache_data.clear()
-        st.session_state["last_sync"] = datetime.now(tz_sp)
-        st.success(f"{count} vendas novas sincronizadas!")
-    last = st.session_state.get("last_sync")
-    if last:
-        sync_col.caption(last.strftime("Últ. sync: %d/%m %H:%M"))
-
-    # 5) Badge de Contas + expander com multiselect
+    # --- filtro discreto de Contas no topo ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
-    st.session_state.setdefault("contas_ms", contas_lst.copy())
-    sel = st.session_state["contas_ms"]
-    badge_label = f'<span class="badge-contas">{"Todas as contas" if len(sel)==len(contas_lst) else f"{len(sel)} contas"}</span>'
-    with contas_col.expander(badge_label, expanded=False):
-        st.markdown("")  # forçar conteúdo acima
-        st.multiselect("", options=contas_lst, default=sel, key="contas_ms")
-    # filtra
-    df_full = df_full[df_full["nickname"].isin(sel)]
-
-    # 3) Agregação: Por Conta vs Total Geral
-    modo_agregacao = modo_col.radio(
-        "", ["👤 Por Conta", "🔢 Total Geral"],
-        horizontal=True, key="modo_agregacao"
+    selecionadas = st.multiselect(
+        "🔹 Contas (opcional)",
+        options=contas_lst,
+        default=contas_lst,
+        key="contas_ms",
+        help="Filtre por uma ou mais contas; deixe todas selecionadas para não filtrar."
     )
+    # aplica filtro de contas
+    if selecionadas:
+        df_full = df_full[df_full["nickname"].isin(selecionadas)]
 
-    # 10) Granularidade
-    granularidade = gran_col.radio(
-        "", ["⏱️ Por Hora", "📅 Diária", "🗓️ Semanal", "🗓️ Mensal"],
-        horizontal=True, key="granularidade"
-    )
+    # --- linha única de filtros: Quick-Filter | De | Até ---
+    col1, col2, col3 = st.columns([2, 1.5, 1.5])
 
-    # 4) Busca rápida
-    search_text = search_col.text_input(
-        "🔍", "",
-        placeholder="Código ou cliente...",
-        help="Busca rápida",
-        key="search_txt"
-    )
-    if search_text:
-        df_full = df_full[
-            df_full["external_reference"].str.contains(search_text, case=False, na=False) |
-            df_full["nickname"].str.contains(search_text, case=False, na=False)
-        ]
-
-    # 1) Quick-filter (Hoje, Ontem, etc)
-    quick_col.selectbox(
-        "", 
-        ["Hoje", "Ontem", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias", "Período Personalizado"],
+        # 1) Filtro Rápido (incluindo “Ontem”)
+    filtro_rapido = col1.selectbox(
+        "🔹 Filtro Rápido",
+        [
+            "Período Personalizado",
+            "Hoje",
+            "Ontem",
+            "Últimos 7 Dias",
+            "Este Mês",
+            "Últimos 30 Dias"
+        ],
         key="filtro_quick"
     )
-
-    # 2) Date inputs De/Até
+    
+    # 2) Determina intervalos de data (com “Ontem”)
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
-    hoje     = datetime.now(tz_sp).date()
-    filtro   = st.session_state["filtro_quick"]
-
-    if filtro == "Hoje":
-        de = ate = hoje
-    elif filtro == "Ontem":
-        de = ate = hoje - pd.Timedelta(days=1)
-    elif filtro == "Últimos 7 Dias":
+    hoje     = pd.Timestamp.now().date()
+    
+    if filtro_rapido == "Hoje":
+        de, ate = hoje, hoje
+    
+    elif filtro_rapido == "Ontem":
+        ontem = hoje - pd.Timedelta(days=1)
+        de, ate = ontem, ontem
+    
+    elif filtro_rapido == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
-    elif filtro == "Este Mês":
+    
+    elif filtro_rapido == "Este Mês":
         de, ate = hoje.replace(day=1), hoje
-    elif filtro == "Últimos 30 Dias":
+    
+    elif filtro_rapido == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
-    else:
+    
+    else:  # Período Personalizado
         de, ate = data_min, data_max
 
-    custom = (filtro == "Período Personalizado")
-    de = de_col.date_input("", value=de, min_value=data_min, max_value=data_max,
-                          disabled=not custom, key="de_q")
-    ate = ate_col.date_input("", value=ate, min_value=data_min, max_value=data_max,
-                             disabled=not custom, key="ate_q")
-
-    # 2) Limpar filtros
-    if clear_col.button("✖", help="Limpar Filtros"):
-        # redefinir tudo
-        st.session_state["contas_ms"]      = contas_lst.copy()
-        st.session_state["modo_agregacao"] = "👤 Por Conta"
-        st.session_state["granularidade"]  = "📅 Diária"
-        st.session_state["search_txt"]     = ""
-        st.session_state["filtro_quick"]   = "Hoje"
-        st.session_state["de_q"]           = data_min
-        st.session_state["ate_q"]          = data_max
-        st.experimental_rerun()
-
-    # --- A partir daqui, aplique timezone, métricas e gráfico ---
-    # (… seu código existente …)
-
-    # --- 9) Mini-sparkline de tendência ---
-    spark_col = st.columns([1,1,1,1,2])[4]
-    trend = (
-        df_full
-        .groupby(df_full["date_created"].dt.date)["total_amount"]
-        .sum()
+    # 3) Date inputs (sempre visíveis, mas desabilitados se não for personalizado)
+    custom = (filtro_rapido == "Período Personalizado")
+    de = col2.date_input(
+        "🔹 De",
+        value=de,
+        min_value=data_min,
+        max_value=data_max,
+        disabled=not custom,
+        key="de_q"
     )
-    spark_col.line_chart(trend, use_container_width=True, height=80)
- 
+    ate = col3.date_input(
+        "🔹 Até",
+        value=ate,
+        min_value=data_min,
+        max_value=data_max,
+        disabled=not custom,
+        key="ate_q"
+    )
+
+    # --- aplica filtro de datas ---
+    df = df_full[
+        (df_full["date_created"].dt.date >= de) &
+        (df_full["date_created"].dt.date <= ate)
+    ]
+
+    if df.empty:
+        st.warning("Nenhuma venda encontrada para os filtros selecionados.")
+        return
+
+
+    # =================== Ajuste de Timezone ===================
+    # Primeiro, define o timezone como UTC para os timestamps "naive"
+    df["date_created"] = df["date_created"].dt.tz_localize("UTC")
+
+    # Converte para o fuso horário de São Paulo
+    df["date_created"] = df["date_created"].dt.tz_convert("America/Sao_Paulo")
+
+    
+    # 4) Métricas
+    total_vendas = len(df)
+    total_valor  = df["total_amount"].sum()
+    total_itens  = df["quantity"].sum()
+    ticket_medio = total_valor / total_vendas if total_vendas else 0
+
+    # Exibição das métricas
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🧾 Vendas Realizadas", total_vendas)
+    c2.metric("💰 Receita Total", format_currency(total_valor))
+    c3.metric("📦 Itens Vendidos", int(total_itens))
+    c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
+    
+    import plotly.express as px
+
+    # =================== Gráfico de Linha - Total Vendido ===================
+    col_vis1, col_vis2 = st.columns(5)
+    
+    # 0) Modo de agregação via radio
+    modo_agregacao = col_vis1.radio(
+        "👁️ Visão da Linha",
+        ["Por Conta", "Total Geral"],
+        horizontal=True,
+        key="modo_agregacao"
+    )
+    
+    # 1) Frequência: diária ou mensal
+    tipo_visualizacao = col_vis2.radio(
+        "Visualização do Gráfico",
+        ["Diária", "Mensal"],
+        horizontal=True,
+        key="periodo"   # <— use uma key diferente aqui
+    )
+    
     # 2) Prepara eixo X e agrupamentos
     if tipo_visualizacao == "Diária":
         eixo_x = "date_created"
