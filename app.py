@@ -341,9 +341,9 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # 1) Layout dos filtros
-    col1, col2, col3 = st.columns([2, 2, 2])
-    
+    # --- 1) Layout dos filtros (tudo em uma linha) ---
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+
     # Selectbox de Conta
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
@@ -356,25 +356,33 @@ def mostrar_dashboard():
         ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"]
     )
 
-    # 2) Ajuste Dinâmico dos Campos de Data
+    # 2) Determina limites de data
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
-    hoje = pd.Timestamp.now().date()
-    
+    hoje     = pd.Timestamp.now().date()
+
+    # 3) Renderiza De/Até dinamicamente na mesma linha
     if filtro_rapido == "Hoje":
-        de, ate = hoje, hoje
+        de = ate = hoje
+        col3.write(f"**De:** {de}")
+        col4.write(f"**Até:** {ate}")
     elif filtro_rapido == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
+        col3.write(f"**De:** {de}")
+        col4.write(f"**Até:** {ate}")
     elif filtro_rapido == "Este Mês":
         de, ate = hoje.replace(day=1), hoje
+        col3.write(f"**De:** {de}")
+        col4.write(f"**Até:** {ate}")
     elif filtro_rapido == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
+        col3.write(f"**De:** {de}")
+        col4.write(f"**Até:** {ate}")
     else:
-        col2, col3 = st.columns([1, 1])
-        de = col2.date_input("🔹 De",  value=data_min, min_value=data_min, max_value=data_max)
-        ate = col3.date_input("🔹 Até", value=data_max, min_value=data_min, max_value=data_max)
+        de  = col3.date_input("🔹 De",  value=data_min, min_value=data_min, max_value=data_max)
+        ate = col4.date_input("🔹 Até", value=data_max, min_value=data_min, max_value=data_max)
 
-    # 3) Aplica filtros
+    # 4) Aplica filtros e continua renderização do dashboard
     df = carregar_vendas(conta_id)
     df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
 
