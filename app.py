@@ -9,6 +9,9 @@ import locale
 from streamlit_option_menu import option_menu
 from typing import Optional
 from sales import sync_all_accounts
+from datetime import datetime
+import pytz
+
 
 # Tenta configurar locale pt_BR; guarda se deu certo
 try:
@@ -311,12 +314,6 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def mostrar_dashboard():
-    import streamlit as st
-    import pandas as pd
-    from sqlalchemy import text
-    from datetime import datetime
-    import pytz
-    import plotly.express as px
 
     # fuso SP
     tz_sp = pytz.timezone("America/Sao_Paulo")
