@@ -327,16 +327,16 @@ def mostrar_dashboard():
 
     # --- estilo customizado para labels verdes ---
         st.markdown(
-        '''
-        <style>
-        .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
-        .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
-            color: #32CD32 !important;
-        }
-        </style>
-        ''',
-        unsafe_allow_html=True
-    )
+            '''
+            <style>
+            .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
+            .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
+                color: #32CD32 !important;
+            }
+            </style>
+            ''',
+            unsafe_allow_html=True
+        )
 
     # --- botão de sincronização ---
     if st.button("🔄 Sincronizar Vendas"):
