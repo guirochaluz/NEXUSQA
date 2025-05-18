@@ -318,10 +318,10 @@ def mostrar_dashboard():
     import pandas as pd
     from sqlalchemy import text
 
+    # --- estilo customizado ---
     st.markdown(
         '''
         <style>
-        /* labels verdes para selectbox e dateinput */
         .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
         .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
             color: #32CD32 !important;
@@ -331,32 +331,47 @@ def mostrar_dashboard():
         unsafe_allow_html=True
     )
 
-    # Botão de sincronização
+    # --- botão de sincronização ---
     if st.button("🔄 Sincronizar Vendas"):
         count = sync_all_accounts()
         st.cache_data.clear()
         st.success(f"{count} vendas novas sincronizadas com sucesso!")
         st.rerun()
 
-    # Carrega o DataFrame completo
+    # --- carrega dados completos ---
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- Filtros na mesma linha ---
+    # --- layout dos filtros em 4 colunas ---
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
-    # 1) Multiselect de Contas
+    # 1) Contas: texto + expander com multiselect
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
-    selecionadas = col1.multiselect(
-        "🔹 Contas",
-        options=contas_lst,
-        default=contas_lst,
-        help="Selecione uma ou mais contas",
-        key="contas_ms"
-    )
+
+    # inicializa seleção no session_state
+    if "contas_ms" not in st.session_state:
+        st.session_state["contas_ms"] = contas_lst.copy()
+    selecionadas = st.session_state["contas_ms"]
+
+    # monta texto resumido
+    if len(selecionadas) == len(contas_lst):
+        display = "Todas as contas"
+    else:
+        display = f"{len(selecionadas)} selecionada(s)"
+    col1.markdown(f"**🔹 Contas:** {display}")
+
+    # expander para alterar seleção
+    with col1.expander("Alterar Contas", expanded=False):
+        st.session_state["contas_ms"] = st.multiselect(
+            "🔹 Contas",
+            options=contas_lst,
+            default=selecionadas,
+            key="contas_ms"
+        )
+        selecionadas = st.session_state["contas_ms"]
 
     # 2) Filtro Rápido
     filtro_rapido = col2.selectbox(
@@ -365,7 +380,7 @@ def mostrar_dashboard():
         key="filtro_quick"
     )
 
-    # 3) Calcular limites de data
+    # 3) Calcula limites para datas
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
@@ -381,7 +396,7 @@ def mostrar_dashboard():
     else:
         de, ate = data_min, data_max
 
-    # 4) Inputs de data (sempre mostrados, mas desabilitados quando não for custom)
+    # 4) Date inputs sempre visíveis, mas desabilitados quando não é personalizado
     is_custom = (filtro_rapido == "Período Personalizado")
     de = col3.date_input(
         "🔹 De",
@@ -389,7 +404,7 @@ def mostrar_dashboard():
         min_value=data_min,
         max_value=data_max,
         disabled=not is_custom,
-        key="de_ms"
+        key="de_q"
     )
     ate = col4.date_input(
         "🔹 Até",
@@ -397,14 +412,16 @@ def mostrar_dashboard():
         min_value=data_min,
         max_value=data_max,
         disabled=not is_custom,
-        key="ate_ms"
+        key="ate_q"
     )
 
-    # --- Aplica filtros ao DataFrame ---
+    # --- aplica todos os filtros ---
     df = carregar_vendas(None)
+
     # filtra por contas selecionadas
     if selecionadas:
         df = df[df["nickname"].isin(selecionadas)]
+
     # filtra por período
     df = df[
         (df["date_created"].dt.date >= de) &
@@ -414,7 +431,6 @@ def mostrar_dashboard():
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
         return
-
 
     # =================== Ajuste de Timezone ===================
     # Primeiro, define o timezone como UTC para os timestamps "naive"
