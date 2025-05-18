@@ -450,8 +450,10 @@ def mostrar_dashboard():
     import plotly.express as px
 
     # =================== Gráfico de Linha - Total Vendido ===================
+    col_vis1, col_vis2 = st.columns(2)
+    
     # 0) Modo de agregação via radio
-    modo_agregacao = st.radio(
+    modo_agregacao = col_vis1.radio(
         "👁️ Visão da Linha",
         ["Por Conta", "Total Geral"],
         horizontal=True,
@@ -459,7 +461,7 @@ def mostrar_dashboard():
     )
     
     # 1) Frequência: diária ou mensal
-    tipo_visualizacao = st.radio(
+    tipo_visualizacao = col_vis2.radio(
         "Visualização do Gráfico",
         ["Diária", "Mensal"],
         horizontal=True,
