@@ -449,78 +449,78 @@ def mostrar_dashboard():
     
     import plotly.express as px
 
-        # =================== Gráfico de Linha - Total Vendido ===================
-col_title, col_visao, col_periodo = st.columns([8, 1, 1])
-title_placeholder = col_title.empty()
-
-modo_agregacao = col_visao.radio(
-    "👁️",
-    ["Por Conta", "Total Geral"],
-    horizontal=True,
-    key="modo_agregacao"
-)
-
-tipo_visualizacao = col_periodo.radio(
-    "📊",
-    ["Diária", "Mensal"],
-    horizontal=True,
-    key="periodo"
-)
-
-# 2) Prepara e agrega os dados
-df_plot = df.copy()
-if tipo_visualizacao == "Diária":
-    df_plot["date_created"] = df_plot["date_created"].dt.date
-    eixo_x = "date_created"
-    periodo_label = "Dia"
-else:
-    df_plot["date_created"] = df_plot["date_created"].dt.to_period("M").astype(str)
-    eixo_x = "date_created"
-    periodo_label = "Mês"
-
-if modo_agregacao == "Por Conta":
-    vendas_por_data = (
-        df_plot
-        .groupby([eixo_x, "nickname"])["total_amount"]
-        .sum()
-        .reset_index(name="Valor Total")
+            # =================== Gráfico de Linha - Total Vendido ===================
+    col_title, col_visao, col_periodo = st.columns([8, 1, 1])
+    title_placeholder = col_title.empty()
+    
+    modo_agregacao = col_visao.radio(
+        "👁️",
+        ["Por Conta", "Total Geral"],
+        horizontal=True,
+        key="modo_agregacao"
     )
-    titulo = f"💵 Total Vendido por {periodo_label} (Linha por Nickname)"
-    color_dim = "nickname"
-    color_seq = px.colors.sequential.Agsunset
-else:
-    vendas_por_data = (
-        df_plot
-        .groupby(eixo_x)["total_amount"]
-        .sum()
-        .reset_index(name="Valor Total")
+    
+    tipo_visualizacao = col_periodo.radio(
+        "📊",
+        ["Diária", "Mensal"],
+        horizontal=True,
+        key="periodo"
     )
-    titulo = f"💵 Total Vendido por {periodo_label} (Soma Total)"
-    color_dim = None
-    color_seq = ["#27ae60"]
-
-# 3) Atualiza o título
-title_placeholder.markdown(f"### {titulo}")
-
-# 4) Desenha o gráfico
-fig = px.line(
-    vendas_por_data,
-    x=eixo_x,
-    y="Valor Total",
-    color=color_dim,
-    labels={eixo_x: "Data", "Valor Total": "Valor Total", "nickname": "Conta"},
-    color_discrete_sequence=color_seq,
-)
-fig.update_traces(
-    mode="lines+markers",
-    marker=dict(size=5),
-    texttemplate="%{y:,.2f}",
-    textposition="top center"
-)
-# garante um pouco mais de espaço em cima para o header
-fig.update_layout(margin=dict(t=30, b=20, l=40, r=10))
-
-st.plotly_chart(fig, use_container_width=True)
+    
+    # 2) Prepara e agrega os dados
+    df_plot = df.copy()
+    if tipo_visualizacao == "Diária":
+        df_plot["date_created"] = df_plot["date_created"].dt.date
+        eixo_x = "date_created"
+        periodo_label = "Dia"
+    else:
+        df_plot["date_created"] = df_plot["date_created"].dt.to_period("M").astype(str)
+        eixo_x = "date_created"
+        periodo_label = "Mês"
+    
+    if modo_agregacao == "Por Conta":
+        vendas_por_data = (
+            df_plot
+            .groupby([eixo_x, "nickname"])["total_amount"]
+            .sum()
+            .reset_index(name="Valor Total")
+        )
+        titulo = f"💵 Total Vendido por {periodo_label} (Linha por Nickname)"
+        color_dim = "nickname"
+        color_seq = px.colors.sequential.Agsunset
+    else:
+        vendas_por_data = (
+            df_plot
+            .groupby(eixo_x)["total_amount"]
+            .sum()
+            .reset_index(name="Valor Total")
+        )
+        titulo = f"💵 Total Vendido por {periodo_label} (Soma Total)"
+        color_dim = None
+        color_seq = ["#27ae60"]
+    
+    # 3) Atualiza o título
+    title_placeholder.markdown(f"### {titulo}")
+    
+    # 4) Desenha o gráfico
+    fig = px.line(
+        vendas_por_data,
+        x=eixo_x,
+        y="Valor Total",
+        color=color_dim,
+        labels={eixo_x: "Data", "Valor Total": "Valor Total", "nickname": "Conta"},
+        color_discrete_sequence=color_seq,
+    )
+    fig.update_traces(
+        mode="lines+markers",
+        marker=dict(size=5),
+        texttemplate="%{y:,.2f}",
+        textposition="top center"
+    )
+    # garante um pouco mais de espaço em cima para o header
+    fig.update_layout(margin=dict(t=30, b=20, l=40, r=10))
+    
+    st.plotly_chart(fig, use_container_width=True)
 
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
