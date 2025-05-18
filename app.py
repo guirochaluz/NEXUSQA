@@ -459,11 +459,11 @@ def mostrar_dashboard():
     )
     
     # 1) Frequência: diária ou mensal
-    tipo_visualizacao = st.radio(
+        tipo_visualizacao = st.radio(
         "Visualização do Gráfico",
         ["Diária", "Mensal"],
         horizontal=True,
-        key="filtro_quick"
+        key="periodo"   # <— use uma key diferente aqui
     )
     
     # 2) Prepara eixo X e agrupamentos
