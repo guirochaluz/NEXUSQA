@@ -67,9 +67,6 @@ if not st.session_state["authenticated"]:
             st.error("Credenciais inválidas")
     st.stop()
 
-# ----------------- Título -----------------
-st.title("Dashboard")
-
 # ----------------- Variáveis de Ambiente -----------------
 load_dotenv()
 BACKEND_URL  = os.getenv("BACKEND_URL")
