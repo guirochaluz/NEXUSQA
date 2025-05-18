@@ -317,74 +317,84 @@ def mostrar_dashboard():
     st.markdown(
         '''
         <style>
-        .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span {
-            color: #32CD32 !important;
-        }
+        /* mantém seus selectboxes e dateinputs com label verde */
+        .stSelectbox label div[data-testid="stMarkdownContainer"] > div > span,
         .stDateInput label div[data-testid="stMarkdownContainer"] > div > span {
             color: #32CD32 !important;
         }
         </style>
-        ''' ,
+        ''',
         unsafe_allow_html=True
     )
 
-    # Botão para sincronização incremental
     if st.button("🔄 Sincronizar Vendas"):
         count = sync_all_accounts()
         st.cache_data.clear()
         st.success(f"{count} vendas novas sincronizadas com sucesso!")
         st.rerun()
 
-    # 0) Carrega dados brutos
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- 1) Layout dos filtros (tudo em uma linha) ---
+    # --- filtros todos na mesma linha ---
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    # Conta
+    contas_df = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
+    contas = ["Todas as contas"] + contas_df["nickname"].astype(str).tolist()
+    escolha = col1.selectbox("🔹 Conta", contas)
+    conta_id = None if escolha == "Todas as contas" else escolha
 
-    # Selectbox de Conta
-    contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
-    contas_lst = contas_df["nickname"].astype(str).tolist()
-    escolha    = col1.selectbox("🔹 Conta", ["Todas as contas"] + contas_lst)
-    conta_id   = None if escolha == "Todas as contas" else escolha
-
-    # Selectbox de Filtro Rápido
-    filtro_rapido = col2.selectbox(
+    # Filtro Rápido
+    filtro = col2.selectbox(
         "🔹 Filtro Rápido",
         ["Período Personalizado", "Hoje", "Últimos 7 Dias", "Este Mês", "Últimos 30 Dias"]
     )
 
-    # 2) Determina limites de data
+    # limites de data
     data_min = df_full["date_created"].dt.date.min()
     data_max = df_full["date_created"].dt.date.max()
     hoje     = pd.Timestamp.now().date()
 
-    # 3) Renderiza De/Até dinamicamente na mesma linha
-    if filtro_rapido == "Hoje":
-        de = ate = hoje
-        col3.write(f"**De:** {de}")
-        col4.write(f"**Até:** {ate}")
-    elif filtro_rapido == "Últimos 7 Dias":
+    # calcula os valores
+    if filtro == "Hoje":
+        de, ate = hoje, hoje
+    elif filtro == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
-        col3.write(f"**De:** {de}")
-        col4.write(f"**Até:** {ate}")
-    elif filtro_rapido == "Este Mês":
+    elif filtro == "Este Mês":
         de, ate = hoje.replace(day=1), hoje
-        col3.write(f"**De:** {de}")
-        col4.write(f"**Até:** {ate}")
-    elif filtro_rapido == "Últimos 30 Dias":
+    elif filtro == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
-        col3.write(f"**De:** {de}")
-        col4.write(f"**Até:** {ate}")
     else:
-        de  = col3.date_input("🔹 De",  value=data_min, min_value=data_min, max_value=data_max)
-        ate = col4.date_input("🔹 Até", value=data_max, min_value=data_min, max_value=data_max)
+        # período personalizado: valores padrão para inputs
+        de, ate = data_min, data_max
 
-    # 4) Aplica filtros e continua renderização do dashboard
+    # renderiza sempre inputs, mas desabilita quando não é personalizado
+    is_custom = (filtro == "Período Personalizado")
+    de = col3.date_input(
+        "🔹 De",
+        value=de,
+        min_value=data_min,
+        max_value=data_max,
+        disabled=not is_custom,
+        key="de_quick",
+    )
+    ate = col4.date_input(
+        "🔹 Até",
+        value=ate,
+        min_value=data_min,
+        max_value=data_max,
+        disabled=not is_custom,
+        key="ate_quick",
+    )
+
+    # aplica os filtros
     df = carregar_vendas(conta_id)
-    df = df[(df["date_created"].dt.date >= de) & (df["date_created"].dt.date <= ate)]
+    df = df[
+        (df["date_created"].dt.date >= de) &
+        (df["date_created"].dt.date <= ate)
+    ]
 
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
