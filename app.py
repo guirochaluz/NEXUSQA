@@ -498,7 +498,7 @@ def mostrar_dashboard():
         color_seq = ["#27ae60"]
     
     titulo = f"💵 Total Vendido por {periodo_label} " + (
-        "(Linha por Nickname)" if modo_agregacao=="Por Conta" else "(Soma Total)"
+        "(Linha por Conta)" if modo_agregacao=="Por Conta" else "(Soma Total)"
     )
     
     # 3) Atualiza o título
