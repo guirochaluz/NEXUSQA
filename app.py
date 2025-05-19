@@ -41,31 +41,59 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+import streamlit as st
+from streamlit_cookies_manager import EncryptedCookieManager
+
 # ----------------- Autenticação -----------------
+# 1) Gerenciador de cookies (instale streamlit-cookies-manager)
+cookies = EncryptedCookieManager(prefix="nexus/")
+
+# Não continue até o cookie estar pronto
+if not cookies.ready():
+    st.stop()
+
+# 2) Inicializa session_state
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
+# 3) Se houver token no cookie, considera autenticado
+if cookies.get("access_token"):
+    st.session_state["authenticated"] = True
+    st.session_state["access_token"] = cookies["access_token"]
+
+# 4) Login automático via ?nexus_auth=success (OAuth)
 params = st.query_params
-# login automático via ?nexus_auth=success
 if params.get("nexus_auth", [None])[0] == "success":
     st.session_state["authenticated"] = True
-    sync_all_accounts()
-    st.cache_data.clear()
+    # opcional: você já salvou o access_token no cookie em ml_callback()
     st.experimental_set_query_params()
+    st.experimental_rerun()
 
+# 5) Se não autenticado, renderiza tela de login
 if not st.session_state["authenticated"]:
     st.title("Sistema de Gestão - Grupo Nexus")
     username = st.text_input("Usuário")
     password = st.text_input("Senha", type="password")
     if st.button("Entrar"):
         if username == "GRUPONEXUS" and password == "NEXU$2025":
+            # você pode tanto colocar o token fixo no session_state...
             st.session_state["authenticated"] = True
-            sync_all_accounts()
-            st.cache_data.clear()
+            st.session_state["access_token"] = "seu_token_aqui"
+            # ...quanto gravar no cookie:
+            cookies["access_token"] = st.session_state["access_token"]
+            cookies.save()
             st.rerun()
         else:
             st.error("Credenciais inválidas")
     st.stop()
+
+# 6) Logout (botão em qualquer sidebar)
+if st.sidebar.button("Sair"):
+    # limpa sessão e cookie
+    st.session_state["authenticated"] = False
+    cookies.delete("access_token")
+    cookies.save()
+    st.experimental_rerun()
 
 # ----------------- Variáveis de Ambiente -----------------
 load_dotenv()
