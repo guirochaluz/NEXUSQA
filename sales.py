@@ -7,7 +7,8 @@ from sqlalchemy import func, text
 from typing import Optional
 from dotenv import load_dotenv
 from dateutil import parser
-from dateutil.tz import tzutc
+from dateutil.tz import gettz, tzutc
+from datetime import timedelta
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -92,23 +93,25 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
         except Exception as e:
             print(f"⚠️ Falha ao atualizar token para {ml_user_id}: {e}")
 
-        # 1) Pega a última data criada no banco
-        last_db_date = (
-            db.query(func.max(Sale.date_created))
+        # 1) Pega o último date_last_updated no banco
+        last_update = (
+            db.query(func.max(Sale.date_last_updated))
               .filter(Sale.ml_user_id == int(ml_user_id))
               .scalar()
         )
         # Se nunca importou nada, faz full import
-        if last_db_date is None:
+        if last_update is None:
             return get_full_sales(ml_user_id, access_token)
 
         # 2) Ajusta fuso: assume America/Sao_Paulo e converte para UTC
-        if last_db_date.tzinfo is None:
-            from dateutil.tz import gettz
-            last_db_date = last_db_date.replace(tzinfo=gettz("America/Sao_Paulo"))
-        last_db_date_utc = last_db_date.astimezone(tzutc())
+        if last_update.tzinfo is None:
+            last_update = last_update.replace(tzinfo=gettz("America/Sao_Paulo"))
+        last_update_utc = last_update.astimezone(tzutc())
 
-        # 3) Paginação das vendas incrementais usando last_updated
+        # 3) Subtrai 1s para não pular eventos exatos no limite
+        fetch_from = (last_update_utc - timedelta(seconds=1)).isoformat()
+
+        # 4) Paginação usando order.last_updated.from
         offset = 0
         while True:
             params = {
@@ -116,7 +119,7 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
                 "order.status": "paid",
                 "limit": FULL_PAGE_SIZE,
                 "sort": "date_desc",
-                "order.last_updated.from": last_db_date_utc.isoformat(),
+                "order.last_updated.from": fetch_from,
                 "site": "MLB",
                 "offset": offset,
             }
@@ -142,7 +145,6 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     except Exception:
         db.rollback()
         raise
-
     finally:
         db.close()
 
