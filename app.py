@@ -1,17 +1,17 @@
 import os
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import requests
-from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import locale
-from streamlit_option_menu import option_menu
-from typing import Optional
-from sales import sync_all_accounts
-from streamlit_cookies_manager import EncryptedCookieManager
 
-# ----------------- Configuração da Página -----------------
+# 1) Carrega .env antes de tudo
+load_dotenv()
+COOKIE_SECRET = os.getenv("COOKIE_SECRET")
+BACKEND_URL    = os.getenv("BACKEND_URL")
+FRONTEND_URL   = os.getenv("FRONTEND_URL")
+DB_URL         = os.getenv("DB_URL")
+ML_CLIENT_ID   = os.getenv("ML_CLIENT_ID")
+
+# 2) Agora sim importe o Streamlit e configure a página _antes_ de qualquer outra chamada st.*
+import streamlit as st
 st.set_page_config(
     page_title="Sistema de Gestão - NEXUS",
     page_icon="📊",
@@ -19,7 +19,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Tenta configurar locale pt_BR; guarda se deu certo
+# 3) Depois de set_page_config, importe tudo o mais que precisar
+from streamlit_cookies_manager import EncryptedCookieManager
+import pandas as pd
+import plotly.express as px
+import requests
+from sqlalchemy import create_engine, text
+from streamlit_option_menu import option_menu
+from typing import Optional
+from sales import sync_all_accounts
+
+# 4) Configuração de locale
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
     LOCALE_OK = True
@@ -27,90 +37,29 @@ except locale.Error:
     LOCALE_OK = False
 
 def format_currency(valor: float) -> str:
-    """
-    Formata um float como BRL:
-    - Usa locale se LOCALE_OK for True;
-    - Senão, faz um fallback manual 'R$ 1.234,56'.
-    """
-    if LOCALE_OK:
-        try:
-            return locale.currency(valor, grouping=True)
-        except Exception:
-            pass
-    # Fallback manual:
-    inteiro, frac = f"{valor:,.2f}".split('.')
-    inteiro = inteiro.replace(',', '.')
-    return f"R$ {inteiro},{frac}"
+    # ...
+    ...
 
-
-# ----------------- Autenticação -----------------
-load_dotenv()  # carrega o .env
-COOKIE_SECRET = os.getenv("COOKIE_SECRET")
+# 5) Validações iniciais de ambiente
 if not COOKIE_SECRET:
     st.error("⚠️ Defina COOKIE_SECRET no seu .env")
     st.stop()
 
-# 1) Gerenciador de cookies com a senha de criptografia
-cookies = EncryptedCookieManager(
-    prefix="nexus/",
-    password=COOKIE_SECRET
-)
-
-# 2) Não continue até os cookies estarem prontos
-if not cookies.ready():
-    st.stop()
-
-# 3) Estado inicial de autenticação
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-
-# 4) Se já houver token no cookie, considera autenticado
-if cookies.get("access_token"):
-    st.session_state["authenticated"] = True
-    st.session_state["access_token"] = cookies["access_token"]
-
-# 5) Login automático via ?nexus_auth=success (OAuth)
-if st.query_params.get("nexus_auth", [None])[0] == "success":
-    st.session_state["authenticated"] = True
-    # assume que ml_callback() salvou o access_token no cookie
-    st.experimental_set_query_params()  # limpa o param
-    st.experimental_rerun()
-
-# 6) Tela de login tradicional
-if not st.session_state["authenticated"]:
-    st.title("Sistema de Gestão - Grupo Nexus")
-    username = st.text_input("Usuário")
-    password = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if username == "GRUPONEXUS" and password == "NEXU$2025":
-            st.session_state["authenticated"] = True
-            # Exemplo de token fixo; substitua pelo seu fluxo real
-            st.session_state["access_token"] = "seu_token_aqui"
-            # salva no cookie e persiste entre abas
-            cookies["access_token"] = st.session_state["access_token"]
-            cookies.save()
-            st.rerun()
-        else:
-            st.error("Credenciais inválidas")
-    st.stop()
-
-# 7) Botão de logout (em algum lugar do seu sidebar)
-if st.sidebar.button("Sair"):
-    st.session_state["authenticated"] = False
-    cookies.delete("access_token")
-    cookies.save()
-    st.experimental_rerun()
-
-# ----------------- Variáveis de Ambiente -----------------
-load_dotenv()
-BACKEND_URL  = os.getenv("BACKEND_URL")
-FRONTEND_URL = os.getenv("FRONTEND_URL")
-DB_URL       = os.getenv("DB_URL")
-ML_CLIENT_ID = os.getenv("ML_CLIENT_ID")
-
 if not all([BACKEND_URL, FRONTEND_URL, DB_URL, ML_CLIENT_ID]):
     st.error("❌ Defina BACKEND_URL, FRONTEND_URL, DB_URL e ML_CLIENT_ID em seu .env")
     st.stop()
+
+# 6) Gerenciador de cookies e autenticação
+cookies = EncryptedCookieManager(prefix="nexus/", password=COOKIE_SECRET)
+if not cookies.ready():
+    st.stop()
+
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if cookies.get("access_token"):
+    st.session_state["authenticated"] = True
+    st.session_state["access_token"] = cookies["access_token"]
 
 # ----------------- CSS Customizado -----------------
 st.markdown("""
