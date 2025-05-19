@@ -1,8 +1,18 @@
 import os
+import warnings
+
+# 1) Suprime todos os DeprecationWarning do Python
+os.environ["PYTHONWARNINGS"] = "ignore::DeprecationWarning"
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# 2) (Opcional) Suprime warnings internos do Streamlit
+import logging
+logging.getLogger("streamlit").setLevel(logging.ERROR)
+
+
 from dotenv import load_dotenv
 import locale
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="streamlit")
+
 # 1) Carrega .env antes de tudo
 load_dotenv()
 COOKIE_SECRET = os.getenv("COOKIE_SECRET")
@@ -506,24 +516,29 @@ def mostrar_dashboard():
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
     
-    # 1) Garante datetime e localiza como SP
-    df["date_created"] = pd.to_datetime(df["date_created"]) \
-                           .dt.tz_localize("America/Sao_Paulo")  
+    # 1) Garante datetime
+    df["date_created"] = pd.to_datetime(df["date_created"])
     
-    # 2) Mapeia dia da semana já em SP
+    # 2) Ajusta fuso de SP, convertendo se já for tz-aware ou localizando se for ingênuo
+    try:
+        df["date_created"] = df["date_created"].dt.tz_convert("America/Sao_Paulo")
+    except TypeError:
+        df["date_created"] = df["date_created"].dt.tz_localize("America/Sao_Paulo")
+    
+    # 3) Mapeia dia da semana em português
     dias = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
     df["dia"] = df["date_created"].dt.day_name().map({
         "Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
         "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"
     })
     
-    # 3) Filtra pelo período (usando o próprio .dt.date em SP)
+    # 4) Filtra pelo período selecionado (usando date em SP)
     df_periodo = df[
         (df["date_created"].dt.date >= de) &
         (df["date_created"].dt.date <= ate)
     ]
     
-    # 4) Agrupa e calcula médias
+    # 5) Agrupa e calcula a média diária
     gb = (
         df_periodo
         .groupby(["dia", df_periodo["date_created"].dt.date])["total_amount"]
@@ -535,13 +550,17 @@ def mostrar_dashboard():
     else:
         ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
     
-    # 5) Plota
+    # 6) Plota o gráfico
     fig_bar = px.bar(
-        ab, x="dia", y="total_amount", text_auto=".2s",
-        labels={"dia":"Dia","total_amount":"Média"},
+        ab,
+        x="dia",
+        y="total_amount",
+        text_auto=".2s",
+        labels={"dia":"Dia", "total_amount":"Média"},
         color_discrete_sequence=["#27ae60"]
     )
     st.plotly_chart(fig_bar, use_container_width=True, theme="streamlit")
+
 
 
 
