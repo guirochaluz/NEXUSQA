@@ -454,6 +454,13 @@ def mostrar_dashboard():
     # 2) Prepara e agrega os dados
     df_plot = df.copy()
     
+    # Ajuste de fuso para São Paulo
+    df_plot["date_created"] = (
+        pd.to_datetime(df_plot["date_created"])
+          .dt.tz_localize('UTC')
+          .dt.tz_convert('America/Sao_Paulo')
+    )
+    
     # agrupa por hora sempre que o período for um único dia
     if de == ate:
         df_plot["date_hour"] = df_plot["date_created"].dt.floor("H")
@@ -517,21 +524,36 @@ def mostrar_dashboard():
     st.plotly_chart(fig, use_container_width=True)
 
 
+
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
+    
+    # 1) Mapeamento dos dias em português
     dias = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
     df["dia"] = df["date_created"].dt.day_name().map({
         "Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
         "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"
     })
+    
+    # 2) Ajuste de fuso para São Paulo
+    df["date_created"] = (
+        pd.to_datetime(df["date_created"])
+          .dt.tz_localize('UTC')                    # considera o timestamp original como UTC
+          .dt.tz_convert('America/Sao_Paulo')       # converte para horário de SP
+    )
+    
+    # 3) Agrupamentos e cálculo da média diária
     gb = df.groupby(["dia", df["date_created"].dt.date])["total_amount"].sum().reset_index()
     ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
+    
+    # 4) Plot
     fig_bar = px.bar(
         ab, x="dia", y="total_amount", text_auto=".2s",
         labels={"dia":"Dia","total_amount":"Média"},
         color_discrete_sequence=["#27ae60"]
     )
     st.plotly_chart(fig_bar, use_container_width=True, theme="streamlit")
+
 
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
     st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
