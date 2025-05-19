@@ -104,8 +104,8 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
 
         # 2) Ajusta fuso: assume America/Sao_Paulo e converte para UTC
         if last_db_date.tzinfo is None:
-            local_tz = tz.gettz("America/Sao_Paulo")
-            last_db_date = last_db_date.replace(tzinfo=local_tz)
+            from dateutil.tz import gettz
+            last_db_date = last_db_date.replace(tzinfo=gettz("America/Sao_Paulo"))
         last_db_date_utc = last_db_date.astimezone(tzutc())
 
         # 3) Paginação das vendas incrementais usando last_updated
@@ -147,6 +147,7 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
         db.close()
 
     return total_saved
+
 
 def sync_all_accounts() -> int:
     """
