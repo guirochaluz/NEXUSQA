@@ -547,8 +547,6 @@ def mostrar_dashboard():
     
     st.plotly_chart(fig, use_container_width=True)
 
-
-
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
     
