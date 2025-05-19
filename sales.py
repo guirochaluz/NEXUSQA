@@ -68,50 +68,29 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
 
 
 def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
-    """
-    Coleta apenas as vendas criadas ou atualizadas após o último import,
-    evitando duplicação pelo order_id. Se não houver vendas anteriores,
-    faz um full import.
-    """
     db = SessionLocal()
     total_saved = 0
 
     try:
-        # 0) Refresh do access_token via backend
-        try:
-            refresh_resp = requests.post(
-                f"{BACKEND_URL}/auth/refresh",
-                json={"user_id": ml_user_id}
-            )
-            refresh_resp.raise_for_status()
-            new_token = db.execute(
-                text("SELECT access_token FROM user_tokens WHERE ml_user_id = :uid"),
-                {"uid": ml_user_id}
-            ).scalar()
-            if new_token:
-                access_token = new_token
-        except Exception as e:
-            print(f"⚠️ Falha ao atualizar token para {ml_user_id}: {e}")
-
-        # 1) Pega o último date_last_updated no banco
+        # refresh token…
+        # 1) último updated no banco
         last_update = (
             db.query(func.max(Sale.date_last_updated))
               .filter(Sale.ml_user_id == int(ml_user_id))
               .scalar()
         )
-        # Se nunca importou nada, faz full import
         if last_update is None:
             return get_full_sales(ml_user_id, access_token)
 
-        # 2) Ajusta fuso: assume America/Sao_Paulo e converte para UTC
+        # 2) timezone → UTC
         if last_update.tzinfo is None:
             last_update = last_update.replace(tzinfo=gettz("America/Sao_Paulo"))
         last_update_utc = last_update.astimezone(tzutc())
 
-        # 3) Subtrai 1s para não pular eventos exatos no limite
+        # 3) buffer de 1s
         fetch_from = (last_update_utc - timedelta(seconds=1)).isoformat()
 
-        # 4) Paginação usando order.last_updated.from
+        # 4) paginação
         offset = 0
         while True:
             params = {
@@ -126,7 +105,6 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
             headers = {"Authorization": f"Bearer {access_token}"}
             resp = requests.get(API_BASE, params=params, headers=headers)
             resp.raise_for_status()
-
             orders = resp.json().get("results", [])
             if not orders:
                 break
@@ -142,7 +120,7 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
                 break
             offset += FULL_PAGE_SIZE
 
-    except Exception:
+    except:
         db.rollback()
         raise
     finally:
