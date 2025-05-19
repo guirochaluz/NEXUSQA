@@ -191,6 +191,7 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
         status          = order.get("status"),
         status_detail   = order.get("status_detail"),
         date_created    = parser.isoparse(order.get("date_created")),
+        date_last_updated= parser.isoparse(order["date_last_updated"]),  # ← adicione aqui
         item_id         = item_inf.get("id"),
         item_title      = item_inf.get("title"),
         quantity        = item.get("quantity"),
