@@ -45,41 +45,49 @@ import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 
 # ----------------- Autenticação -----------------
-# 1) Gerenciador de cookies (instale streamlit-cookies-manager)
-cookies = EncryptedCookieManager(prefix="nexus/")
+load_dotenv()  # carrega o .env
+COOKIE_SECRET = os.getenv("COOKIE_SECRET")
+if not COOKIE_SECRET:
+    st.error("⚠️ Defina COOKIE_SECRET no seu .env")
+    st.stop()
 
-# Não continue até o cookie estar pronto
+# 1) Gerenciador de cookies com a senha de criptografia
+cookies = EncryptedCookieManager(
+    prefix="nexus/",
+    password=COOKIE_SECRET
+)
+
+# 2) Não continue até os cookies estarem prontos
 if not cookies.ready():
     st.stop()
 
-# 2) Inicializa session_state
+# 3) Estado inicial de autenticação
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-# 3) Se houver token no cookie, considera autenticado
+# 4) Se já houver token no cookie, considera autenticado
 if cookies.get("access_token"):
     st.session_state["authenticated"] = True
     st.session_state["access_token"] = cookies["access_token"]
 
-# 4) Login automático via ?nexus_auth=success (OAuth)
-params = st.query_params
-if params.get("nexus_auth", [None])[0] == "success":
+# 5) Login automático via ?nexus_auth=success (OAuth)
+if st.query_params.get("nexus_auth", [None])[0] == "success":
     st.session_state["authenticated"] = True
-    # opcional: você já salvou o access_token no cookie em ml_callback()
-    st.experimental_set_query_params()
+    # assume que ml_callback() salvou o access_token no cookie
+    st.experimental_set_query_params()  # limpa o param
     st.experimental_rerun()
 
-# 5) Se não autenticado, renderiza tela de login
+# 6) Tela de login tradicional
 if not st.session_state["authenticated"]:
     st.title("Sistema de Gestão - Grupo Nexus")
     username = st.text_input("Usuário")
     password = st.text_input("Senha", type="password")
     if st.button("Entrar"):
         if username == "GRUPONEXUS" and password == "NEXU$2025":
-            # você pode tanto colocar o token fixo no session_state...
             st.session_state["authenticated"] = True
+            # Exemplo de token fixo; substitua pelo seu fluxo real
             st.session_state["access_token"] = "seu_token_aqui"
-            # ...quanto gravar no cookie:
+            # salva no cookie e persiste entre abas
             cookies["access_token"] = st.session_state["access_token"]
             cookies.save()
             st.rerun()
@@ -87,9 +95,8 @@ if not st.session_state["authenticated"]:
             st.error("Credenciais inválidas")
     st.stop()
 
-# 6) Logout (botão em qualquer sidebar)
+# 7) Botão de logout (em algum lugar do seu sidebar)
 if st.sidebar.button("Sair"):
-    # limpa sessão e cookie
     st.session_state["authenticated"] = False
     cookies.delete("access_token")
     cookies.save()
