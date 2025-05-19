@@ -455,11 +455,7 @@ def mostrar_dashboard():
     df_plot = df.copy()
     
     # Ajuste de fuso para São Paulo
-    df_plot["date_created"] = (
-        pd.to_datetime(df_plot["date_created"])
-          .dt.tz_localize('UTC')
-          .dt.tz_convert('America/Sao_Paulo')
-    )
+    df_plot["date_created"] = df_plot["date_created"].dt.tz_convert('America/Sao_Paulo')
     
     # agrupa por hora sempre que o período for um único dia
     if de == ate:
