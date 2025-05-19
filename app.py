@@ -513,24 +513,27 @@ def mostrar_dashboard():
     })
     
     # 2) Ajuste de fuso para São Paulo
-    df["date_created"] = (
-        pd.to_datetime(df["date_created"])
-          .dt.tz_localize('UTC')                    # considera o timestamp original como UTC
-          .dt.tz_convert('America/Sao_Paulo')       # converte para horário de SP
-    )
+    df["date_created"] = df["date_created"].dt.tz_convert('America/Sao_Paulo')
     
     # 3) Agrupamentos e cálculo da média diária
-    gb = df.groupby(["dia", df["date_created"].dt.date])["total_amount"].sum().reset_index()
+    gb = (
+        df
+        .groupby(["dia", df["date_created"].dt.date])["total_amount"]
+        .sum()
+        .reset_index()
+    )
     ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
     
     # 4) Plot
     fig_bar = px.bar(
-        ab, x="dia", y="total_amount", text_auto=".2s",
-        labels={"dia":"Dia","total_amount":"Média"},
+        ab,
+        x="dia",
+        y="total_amount",
+        text_auto=".2s",
+        labels={"dia":"Dia", "total_amount":"Média"},
         color_discrete_sequence=["#27ae60"]
     )
     st.plotly_chart(fig_bar, use_container_width=True, theme="streamlit")
-
 
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
     st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
