@@ -1,7 +1,8 @@
 import os
 from dotenv import load_dotenv
 import locale
-
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="streamlit")
 # 1) Carrega .env antes de tudo
 load_dotenv()
 COOKIE_SECRET = os.getenv("COOKIE_SECRET")
