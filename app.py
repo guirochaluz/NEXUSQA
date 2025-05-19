@@ -11,6 +11,14 @@ from typing import Optional
 from sales import sync_all_accounts
 from streamlit_cookies_manager import EncryptedCookieManager
 
+# ----------------- Configuração da Página -----------------
+st.set_page_config(
+    page_title="Sistema de Gestão - NEXUS",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
 # Tenta configurar locale pt_BR; guarda se deu certo
 try:
     locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
@@ -34,13 +42,6 @@ def format_currency(valor: float) -> str:
     inteiro = inteiro.replace(',', '.')
     return f"R$ {inteiro},{frac}"
 
-# ----------------- Configuração da Página -----------------
-st.set_page_config(
-    page_title="Sistema de Gestão - NEXUS",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
 
 # ----------------- Autenticação -----------------
 load_dotenv()  # carrega o .env
