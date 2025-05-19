@@ -9,6 +9,7 @@ import locale
 from streamlit_option_menu import option_menu
 from typing import Optional
 from sales import sync_all_accounts
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # Tenta configurar locale pt_BR; guarda se deu certo
 try:
@@ -40,9 +41,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
-import streamlit as st
-from streamlit_cookies_manager import EncryptedCookieManager
 
 # ----------------- Autenticação -----------------
 load_dotenv()  # carrega o .env
