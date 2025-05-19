@@ -68,7 +68,7 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
 
 def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     """
-    Coleta apenas as vendas criadas após o último import (date_created),
+    Coleta apenas as vendas criadas ou atualizadas após o último import,
     evitando duplicação pelo order_id. Se não houver vendas anteriores,
     faz um full import.
     """
@@ -83,7 +83,6 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
                 json={"user_id": ml_user_id}
             )
             refresh_resp.raise_for_status()
-            # assume que o novo token foi salvo em user_tokens
             new_token = db.execute(
                 text("SELECT access_token FROM user_tokens WHERE ml_user_id = :uid"),
                 {"uid": ml_user_id}
@@ -99,37 +98,46 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
               .filter(Sale.ml_user_id == int(ml_user_id))
               .scalar()
         )
-        # Se nunca importou nada, faça full import
+        # Se nunca importou nada, faz full import
         if last_db_date is None:
             return get_full_sales(ml_user_id, access_token)
 
-        # Garante que seja offset-aware UTC
+        # 2) Ajusta fuso: assume America/Sao_Paulo e converte para UTC
         if last_db_date.tzinfo is None:
-            last_db_date = last_db_date.replace(tzinfo=tzutc())
+            local_tz = tz.gettz("America/Sao_Paulo")
+            last_db_date = last_db_date.replace(tzinfo=local_tz)
+        last_db_date_utc = last_db_date.astimezone(tzutc())
 
-        # 2) Chama API pedindo só vendas criadas após last_db_date
-        params = {
-            "seller": ml_user_id,
-            "order.status": "paid",
-            "limit": FULL_PAGE_SIZE,
-            "sort": "date_desc",
-            "order.date_created.from": last_db_date.isoformat(),
-        }
-        resp = requests.get(API_BASE, params=params,
-                            headers={"Authorization": f"Bearer {access_token}"})
-        resp.raise_for_status()
-        orders = resp.json().get("results", [])
-        if not orders:
-            return 0
+        # 3) Paginação das vendas incrementais usando last_updated
+        offset = 0
+        while True:
+            params = {
+                "seller": ml_user_id,
+                "order.status": "paid",
+                "limit": FULL_PAGE_SIZE,
+                "sort": "date_desc",
+                "order.last_updated.from": last_db_date_utc.isoformat(),
+                "site": "MLB",
+                "offset": offset,
+            }
+            headers = {"Authorization": f"Bearer {access_token}"}
+            resp = requests.get(API_BASE, params=params, headers=headers)
+            resp.raise_for_status()
 
-        # 3) Persiste as novas, checando order_id para não duplicar
-        for o in orders:
-            oid = str(o["id"])
-            if not db.query(Sale).filter_by(order_id=oid).first():
-                db.add(_order_to_sale(o, ml_user_id))
-                total_saved += 1
+            orders = resp.json().get("results", [])
+            if not orders:
+                break
 
-        db.commit()
+            for o in orders:
+                oid = str(o["id"])
+                if not db.query(Sale).filter_by(order_id=oid).first():
+                    db.add(_order_to_sale(o, ml_user_id))
+                    total_saved += 1
+
+            db.commit()
+            if len(orders) < FULL_PAGE_SIZE:
+                break
+            offset += FULL_PAGE_SIZE
 
     except Exception:
         db.rollback()
