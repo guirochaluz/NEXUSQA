@@ -609,22 +609,9 @@ def mostrar_anuncios():
     data_ini = st.date_input("De:",  value=df['date_created'].min().date())
     data_fim = st.date_input("Até:", value=df['date_created'].max().date())
 
-    mlb_all = df['item_id'].astype(str).unique().tolist()
-    faturamento_por_mlb = df.groupby('item_id')['total_amount'].sum()
-    top10_mlb = faturamento_por_mlb.nlargest(10).index.astype(str).tolist()
-
-    with st.expander("🔍 Filtrar MLB (item_id)"):
-        busca = st.text_input("Buscar MLB (parte do ID):", placeholder="ex: 5322")
-        if busca:
-            mlb_opts = [m for m in mlb_all if busca in m]
-        else:
-            mlb_opts = mlb_all
-        mlb_sel = st.multiselect("Selecione MLB(s):", options=mlb_opts, default=top10_mlb)
-
     df_filt = df.loc[
-        (df['date_created'].dt.date >= data_ini) &
-        (df['date_created'].dt.date <= data_fim) &
-        (df['item_id'].isin(mlb_sel))
+    (df['date_created'].dt.date >= data_ini) &
+    (df['date_created'].dt.date <= data_fim)
     ]
 
     if df_filt.empty:
