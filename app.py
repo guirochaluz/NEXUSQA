@@ -343,89 +343,89 @@ def mostrar_dashboard():
     if selecionadas:
         df_full = df_full[df_full["nickname"].isin(selecionadas)]
 
-# --- linha única de filtros: Quick-Filter | De | Até ---
-col1, col2, col3 = st.columns([2, 1.5, 1.5])
-
-# 1) Filtro Rápido (incluindo “Ontem” e “Este Ano”)
-filtro_rapido = col1.selectbox(
-    "🔹 Filtro Rápido",
-    [
-        "Período Personalizado",
-        "Hoje",
-        "Ontem",
-        "Últimos 7 Dias",
-        "Este Mês",
-        "Últimos 30 Dias",
-        "Este Ano"
-    ], index = 1,
-    key="filtro_quick"
-)
-
-# 2) Determina intervalos de data
-data_min = df_full["date_created"].dt.date.min()
-data_max = df_full["date_created"].dt.date.max()
-hoje     = pd.Timestamp.now().date()
-
-if filtro_rapido == "Hoje":
-    de = ate = min(hoje, data_max)
-
-elif filtro_rapido == "Ontem":
-    ontem = hoje - pd.Timedelta(days=1)
-    de, ate = ontem, ontem
-
-elif filtro_rapido == "Últimos 7 Dias":
-    de, ate = hoje - pd.Timedelta(days=7), hoje
-
-elif filtro_rapido == "Este Mês":
-    de, ate = hoje.replace(day=1), hoje
-
-elif filtro_rapido == "Últimos 30 Dias":
-    de, ate = hoje - pd.Timedelta(days=30), hoje
-
-elif filtro_rapido == "Este Ano":
-    de, ate = hoje.replace(month=1, day=1), hoje
-
-else:  # Período Personalizado
-    de, ate = data_min, data_max
-
-# 3) Date inputs (sempre visíveis, mas desabilitados se não for personalizado)
-custom = (filtro_rapido == "Período Personalizado")
-de = col2.date_input(
-    "🔹 De",
-    value=de,
-    min_value=data_min,
-    max_value=data_max,
-    disabled=not custom,
-    key="de_q"
-)
-ate = col3.date_input(
-    "🔹 Até",
-    value=ate,
-    min_value=data_min,
-    max_value=data_max,
-    disabled=not custom,
-    key="ate_q"
-)
-
-# 4) Filtro por STATUS
-status_unicos = df_full["status"].dropna().unique().tolist()
-status_selecionados = st.multiselect(
-    "🔹 Status da Venda:",
-    options=status_unicos,
-    default=status_unicos,
-    help="Filtre por um ou mais status (ex: paid, cancelled...)"
-)
-
-# --- aplica filtro de datas e status ---
-df = df_full[
-    (df_full["date_created"].dt.date >= de) &
-    (df_full["date_created"].dt.date <= ate) &
-    (df_full["status"].isin(status_selecionados))
-]
-
-if df.empty:
-    st.warning("Nenhuma venda encontrada para os filtros selecionados.")
-    return
+    # --- linha única de filtros: Quick-Filter | De | Até ---
+    col1, col2, col3 = st.columns([2, 1.5, 1.5])
+    
+    # 1) Filtro Rápido (incluindo “Ontem” e “Este Ano”)
+    filtro_rapido = col1.selectbox(
+        "🔹 Filtro Rápido",
+        [
+            "Período Personalizado",
+            "Hoje",
+            "Ontem",
+            "Últimos 7 Dias",
+            "Este Mês",
+            "Últimos 30 Dias",
+            "Este Ano"
+        ], index = 1,
+        key="filtro_quick"
+    )
+    
+    # 2) Determina intervalos de data
+    data_min = df_full["date_created"].dt.date.min()
+    data_max = df_full["date_created"].dt.date.max()
+    hoje     = pd.Timestamp.now().date()
+    
+    if filtro_rapido == "Hoje":
+        de = ate = min(hoje, data_max)
+    
+    elif filtro_rapido == "Ontem":
+        ontem = hoje - pd.Timedelta(days=1)
+        de, ate = ontem, ontem
+    
+    elif filtro_rapido == "Últimos 7 Dias":
+        de, ate = hoje - pd.Timedelta(days=7), hoje
+    
+    elif filtro_rapido == "Este Mês":
+        de, ate = hoje.replace(day=1), hoje
+    
+    elif filtro_rapido == "Últimos 30 Dias":
+        de, ate = hoje - pd.Timedelta(days=30), hoje
+    
+    elif filtro_rapido == "Este Ano":
+        de, ate = hoje.replace(month=1, day=1), hoje
+    
+    else:  # Período Personalizado
+        de, ate = data_min, data_max
+    
+    # 3) Date inputs (sempre visíveis, mas desabilitados se não for personalizado)
+    custom = (filtro_rapido == "Período Personalizado")
+    de = col2.date_input(
+        "🔹 De",
+        value=de,
+        min_value=data_min,
+        max_value=data_max,
+        disabled=not custom,
+        key="de_q"
+    )
+    ate = col3.date_input(
+        "🔹 Até",
+        value=ate,
+        min_value=data_min,
+        max_value=data_max,
+        disabled=not custom,
+        key="ate_q"
+    )
+    
+    # 4) Filtro por STATUS
+    status_unicos = df_full["status"].dropna().unique().tolist()
+    status_selecionados = st.multiselect(
+        "🔹 Status da Venda:",
+        options=status_unicos,
+        default=status_unicos,
+        help="Filtre por um ou mais status (ex: paid, cancelled...)"
+    )
+    
+    # --- aplica filtro de datas e status ---
+    df = df_full[
+        (df_full["date_created"].dt.date >= de) &
+        (df_full["date_created"].dt.date <= ate) &
+        (df_full["status"].isin(status_selecionados))
+    ]
+    
+    if df.empty:
+        st.warning("Nenhuma venda encontrada para os filtros selecionados.")
+        return
 
 
     # =================== Ajuste de Timezone ===================
