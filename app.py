@@ -170,20 +170,11 @@ def salvar_tokens_no_banco(data: dict):
 @st.cache_data(ttl=300)
 def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
     if conta_id:
-        # Verifica se é um nickname e faz a conversão
-        ml_user_id = pd.read_sql(text("SELECT ml_user_id FROM user_tokens WHERE nickname = :nickname"), 
-                                 engine, params={"nickname": conta_id})
-
-        if ml_user_id.empty:
-            st.error(f"Nickname '{conta_id}' não encontrado no banco de dados.")
-            return pd.DataFrame()
-
-        # Converte para tipo nativo Python (int)
-        ml_user_id = int(ml_user_id.iloc[0]["ml_user_id"])
-
+        # … seu código de consulta por nickname …
         sql = text("""
             SELECT s.order_id,
                    s.date_created,
+                   s.item_id,
                    s.item_title,
                    s.status,
                    s.quantity,
@@ -194,10 +185,12 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
              WHERE s.ml_user_id = :uid
         """)
         df = pd.read_sql(sql, engine, params={"uid": ml_user_id})
+
     else:
         sql = text("""
             SELECT s.order_id,
                    s.date_created,
+                   s.item_id,
                    s.item_title,
                    s.status,
                    s.quantity,
@@ -206,15 +199,17 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
         """)
+        # **ADICIONE esta linha abaixo**
         df = pd.read_sql(sql, engine)
 
-    # converte de UTC para Horário de Brasília e descarta info de tz
+    # converte de UTC para Horário de Brasília e descarta tz
     df["date_created"] = (
         pd.to_datetime(df["date_created"], utc=True)
           .dt.tz_convert("America/Sao_Paulo")
           .dt.tz_localize(None)
     )
     return df
+
 
 # ----------------- Componentes de Interface -----------------
 def render_add_account_button():
