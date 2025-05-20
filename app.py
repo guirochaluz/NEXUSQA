@@ -689,8 +689,8 @@ def mostrar_anuncios():
     perf_sent = df_filt.groupby('sent_cat')[faturamento_col].sum()
     st.bar_chart(perf_sent)
 
-    # 📊 Faturamento por MLB (com título incluso)
-    st.subheader("📊 Faturamento por MLB (item_id e Título)")
+    # 📊 Faturamento por MLB (com título e link)
+    st.subheader("📊 Faturamento por MLB (item_id, Título e Link)")
 
     df_mlb = (
         df_filt
@@ -700,13 +700,25 @@ def mostrar_anuncios():
         .sort_values(by=faturamento_col, ascending=False)
     )
 
+    # Adiciona link clicável baseado no item_id
+    df_mlb['link'] = df_mlb['item_id'].apply(
+        lambda x: f"https://www.mercadolivre.com.br/anuncio/{x}"
+    )
+
+    # Cria uma cópia formatada para exibir na interface
     df_mlb_display = df_mlb.copy()
     df_mlb_display['total_amount'] = df_mlb_display['total_amount'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
 
+    # Torna os links clicáveis no Streamlit
+    df_mlb_display['link'] = df_mlb_display['link'].apply(
+        lambda url: f"[🔗 Ver Anúncio]({url})"
+    )
+
     st.dataframe(df_mlb_display, use_container_width=True)
 
+    # Exportação CSV sem formatação visual
     csv = df_mlb.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Exportar CSV",
