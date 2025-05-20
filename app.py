@@ -597,24 +597,29 @@ def mostrar_contas_cadastradas():
 
 def mostrar_anuncios():
     st.header("🎯 Análise de Anúncios")
-    df = carregar_vendas() 
+    df = carregar_vendas()
 
     if df.empty:
         st.warning("Nenhum dado para exibir.")
         return
 
-    # — garanta que date_created seja datetime —
     df['date_created'] = pd.to_datetime(df['date_created'])
 
-    # — filtros de período —
     data_ini = st.date_input("De:",  value=df['date_created'].min().date())
     data_fim = st.date_input("Até:", value=df['date_created'].max().date())
 
-    # — filtro multiselect para MLB (item_id) —
-    mlb_opts = df['item_id'].unique()
-    mlb_sel = st.multiselect("MLB (item_id):", options=mlb_opts, default=mlb_opts)
+    mlb_all = df['item_id'].astype(str).unique().tolist()
+    faturamento_por_mlb = df.groupby('item_id')['total_amount'].sum()
+    top10_mlb = faturamento_por_mlb.nlargest(10).index.astype(str).tolist()
 
-    # — aplica filtros —
+    with st.expander("🔍 Filtrar MLB (item_id)"):
+        busca = st.text_input("Buscar MLB (parte do ID):", placeholder="ex: 5322")
+        if busca:
+            mlb_opts = [m for m in mlb_all if busca in m]
+        else:
+            mlb_opts = mlb_all
+        mlb_sel = st.multiselect("Selecione MLB(s):", options=mlb_opts, default=top10_mlb)
+
     df_filt = df.loc[
         (df['date_created'].dt.date >= data_ini) &
         (df['date_created'].dt.date <= data_fim) &
@@ -628,13 +633,15 @@ def mostrar_anuncios():
     title_col = 'item_title'
     faturamento_col = 'total_amount'
 
-    # 1️⃣ WordCloud dos títulos
+    # 1️⃣ WordCloud menor e centralizada
     st.subheader("🔍 Nuvem de Palavras dos Títulos")
     text = " ".join(df_filt[title_col])
-    wc = WordCloud(width=800, height=400, background_color="white").generate(text)
-    st.image(wc.to_array(), use_column_width=True)
+    wc = WordCloud(width=600, height=300, background_color="white").generate(text)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.image(wc.to_array(), use_container_width=True)
 
-    # 2️⃣ Top 10 títulos por faturamento
+    # 2️⃣ Top 10 Títulos por Faturamento
     st.subheader("🌟 Top 10 Títulos por Faturamento")
     top10 = (
         df_filt
@@ -645,7 +652,7 @@ def mostrar_anuncios():
     )
     st.bar_chart(top10)
 
-    # 3️⃣ Correlação comprimento do título × faturamento
+    # 3️⃣ Correlação Comprimento × Faturamento
     st.subheader("🔗 Comprimento do Título vs. Faturamento")
     df_filt['title_len'] = df_filt[title_col].str.split().apply(len)
     corr_df = (
@@ -655,49 +662,56 @@ def mostrar_anuncios():
         .reset_index()
     )
     chart = alt.Chart(corr_df).mark_circle(size=60).encode(
-        x='title_len',
-        y='total_amount',
+        x=alt.X('title_len', title='Comprimento do Título (nº de Palavras)'),
+        y=alt.Y('total_amount', title='Faturamento (R$)'),
         tooltip=['item_title','total_amount']
     ).properties(width=700, height=400)
     st.altair_chart(chart, use_container_width=True)
 
-    # 4️⃣ Cluster de anúncios por palavras-chave
+    # 4️⃣ Cluster de títulos
     st.subheader("🔎 Faturamento Médio por Cluster de Títulos")
     vec = TfidfVectorizer(max_features=300)
     X = vec.fit_transform(df_filt[title_col])
     kmeans = KMeans(n_clusters=4, random_state=0).fit(X)
     df_filt['cluster'] = kmeans.labels_
-    perf_cluster = df_filt.groupby('cluster')[faturamento_col].mean()
+    df_filt['cluster_nome'] = df_filt['cluster'].apply(lambda x: f"Cluster {x+1}")
+    perf_cluster = df_filt.groupby('cluster_nome')[faturamento_col].mean()
     st.bar_chart(perf_cluster)
 
-    # 5️⃣ Análise de sentimento dos títulos
+    # 5️⃣ Sentimento dos Títulos
     st.subheader("😊 Sentimento dos Títulos vs. Faturamento")
     df_filt['sentiment'] = df_filt[title_col].apply(lambda t: TextBlob(t).sentiment.polarity)
     df_filt['sent_cat'] = pd.cut(
         df_filt['sentiment'],
         bins=[-1, -0.05, 0.05, 1],
-        labels=['Negativo','Neutro','Positivo']
+        labels=['😠 Negativo','😐 Neutro','😃 Positivo']
     )
     perf_sent = df_filt.groupby('sent_cat')[faturamento_col].sum()
     st.bar_chart(perf_sent)
 
-    # 📊 Tabela de faturamento por MLB (item_id)
-    st.subheader("📊 Faturamento por MLB (item_id)")
+    # 📊 Faturamento por MLB (com título incluso)
+    st.subheader("📊 Faturamento por MLB (item_id e Título)")
+
     df_mlb = (
         df_filt
-        .groupby('item_id')[faturamento_col]
+        .groupby(['item_id', 'item_title'])[faturamento_col]
         .sum()
         .reset_index()
         .sort_values(by=faturamento_col, ascending=False)
     )
-    st.dataframe(df_mlb)
 
-    # ⬇️ Exportar CSV
+    df_mlb_display = df_mlb.copy()
+    df_mlb_display['total_amount'] = df_mlb_display['total_amount'].apply(
+        lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    )
+
+    st.dataframe(df_mlb_display, use_container_width=True)
+
     csv = df_mlb.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Exportar CSV",
         data=csv,
-        file_name="anuncios_faturamento_item_id.csv",
+        file_name="faturamento_por_mlb.csv",
         mime="text/csv"
     )
 
