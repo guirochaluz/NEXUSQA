@@ -39,7 +39,6 @@ from sqlalchemy import create_engine, text
 from streamlit_option_menu import option_menu
 from typing import Optional
 from sales import sync_all_accounts
-import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import altair as alt
 from sklearn.feature_extraction.text import TfidfVectorizer
