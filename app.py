@@ -605,6 +605,9 @@ def mostrar_anuncios():
 
     df['date_created'] = pd.to_datetime(df['date_created'])
 
+    # =======================
+    # 🎯 FILTROS
+    # =======================
     data_ini = st.date_input("De:",  value=df['date_created'].min().date())
     data_fim = st.date_input("Até:", value=df['date_created'].max().date())
 
@@ -633,7 +636,9 @@ def mostrar_anuncios():
     title_col = 'item_title'
     faturamento_col = 'total_amount'
 
-    # 1️⃣ WordCloud menor e centralizada
+    # =======================
+    # 1️⃣ NUVEM DE PALAVRAS
+    # =======================
     st.subheader("🔍 Nuvem de Palavras dos Títulos")
     text = " ".join(df_filt[title_col])
     wc = WordCloud(width=600, height=300, background_color="white").generate(text)
@@ -641,24 +646,37 @@ def mostrar_anuncios():
     with c2:
         st.image(wc.to_array(), use_container_width=True)
 
-    # 2️⃣ Top 10 Títulos por Faturamento
+    # =======================
+    # 2️⃣ TOP 10 TÍTULOS (CORRIGIDO)
+    # =======================
     st.subheader("🌟 Top 10 Títulos por Faturamento")
-    top10 = (
+    top10_df = (
         df_filt
         .groupby(title_col)[faturamento_col]
         .sum()
-        .sort_values(ascending=False)
+        .reset_index()
+        .sort_values(by=faturamento_col, ascending=False)
         .head(10)
     )
-    st.bar_chart(top10)
+    fig_top10 = px.bar(
+        top10_df,
+        x=title_col,
+        y=faturamento_col,
+        text_auto='.2s',
+        labels={title_col: "Título", faturamento_col: "Faturamento (R$)"},
+        color_discrete_sequence=["#1abc9c"]
+    )
+    st.plotly_chart(fig_top10, use_container_width=True)
 
-    # 3️⃣ Correlação Comprimento × Faturamento
-    st.subheader("🔗 Comprimento do Título vs. Faturamento")
-    df_filt['title_len'] = df_filt[title_col].str.split().apply(len)
+    # =======================
+    # 3️⃣ COMPRIMENTO X FATURAMENTO (BASE: TODOS OS DADOS)
+    # =======================
+    st.subheader("🔗 Comprimento do Título vs. Faturamento (Todos os Anúncios)")
+    df['title_len'] = df[title_col].str.split().apply(len)
     corr_df = (
-        df_filt
+        df
         .groupby(title_col)
-        .agg(title_len=('title_len','mean'), total_amount=(faturamento_col,'sum'))
+        .agg(title_len=('title_len','mean'), total_amount=('total_amount','sum'))
         .reset_index()
     )
     chart = alt.Chart(corr_df).mark_circle(size=60).encode(
@@ -668,28 +686,69 @@ def mostrar_anuncios():
     ).properties(width=700, height=400)
     st.altair_chart(chart, use_container_width=True)
 
-    # 4️⃣ Cluster de títulos
-    st.subheader("🔎 Faturamento Médio por Cluster de Títulos")
-    vec = TfidfVectorizer(max_features=300)
-    X = vec.fit_transform(df_filt[title_col])
-    kmeans = KMeans(n_clusters=4, random_state=0).fit(X)
-    df_filt['cluster'] = kmeans.labels_
-    df_filt['cluster_nome'] = df_filt['cluster'].apply(lambda x: f"Cluster {x+1}")
-    perf_cluster = df_filt.groupby('cluster_nome')[faturamento_col].mean()
-    st.bar_chart(perf_cluster)
+    # =======================
+    # 4️⃣ FATURAMENTO POR PALAVRA (SUGESTÃO 1)
+    # =======================
+    st.subheader("🧠 Palavras que mais faturam nos Títulos")
+    from collections import Counter
+    word_faturamento = Counter()
+    for _, row in df_filt.iterrows():
+        palavras = str(row[title_col]).lower().split()
+        for p in palavras:
+            word_faturamento[p] += row[faturamento_col]
 
-    # 5️⃣ Sentimento dos Títulos
-    st.subheader("😊 Sentimento dos Títulos vs. Faturamento")
-    df_filt['sentiment'] = df_filt[title_col].apply(lambda t: TextBlob(t).sentiment.polarity)
-    df_filt['sent_cat'] = pd.cut(
-        df_filt['sentiment'],
-        bins=[-1, -0.05, 0.05, 1],
-        labels=['😠 Negativo','😐 Neutro','😃 Positivo']
+    df_words = pd.DataFrame(word_faturamento.items(), columns=['palavra', 'faturamento'])
+    df_words = df_words.sort_values(by='faturamento', ascending=False).head(15)
+    fig_words = px.bar(
+        df_words,
+        x='palavra',
+        y='faturamento',
+        text_auto='.2s',
+        labels={'palavra': 'Palavra no Título', 'faturamento': 'Faturamento (R$)'},
+        color_discrete_sequence=["#f39c12"]
     )
-    perf_sent = df_filt.groupby('sent_cat')[faturamento_col].sum()
-    st.bar_chart(perf_sent)
+    st.plotly_chart(fig_words, use_container_width=True)
 
-    # 📊 Faturamento por MLB (com título e link)
+    # =======================
+    # 5️⃣ DISTRIBUIÇÃO DO COMPRIMENTO (SUGESTÃO 5)
+    # =======================
+    st.subheader("📏 Distribuição do Comprimento dos Títulos")
+    hist_df = df[title_col].str.split().apply(len).value_counts().sort_index()
+    df_len = pd.DataFrame({'n_palavras': hist_df.index, 'quantidade': hist_df.values})
+    fig_len = px.bar(
+        df_len,
+        x='n_palavras',
+        y='quantidade',
+        labels={'n_palavras': 'Quantidade de Palavras no Título', 'quantidade': 'Qtd. de Títulos'},
+        color_discrete_sequence=["#9b59b6"]
+    )
+    st.plotly_chart(fig_len, use_container_width=True)
+
+    # =======================
+    # 6️⃣ TOP 10 TÍTULOS COM MENOR FATURAMENTO (SUGESTÃO 6)
+    # =======================
+    st.subheader("🚨 Títulos com Menor Faturamento (Top 10)")
+    bottom10_df = (
+        df_filt
+        .groupby(title_col)[faturamento_col]
+        .sum()
+        .reset_index()
+        .sort_values(by=faturamento_col, ascending=True)
+        .head(10)
+    )
+    fig_bottom = px.bar(
+        bottom10_df,
+        x=title_col,
+        y=faturamento_col,
+        text_auto='.2s',
+        labels={title_col: "Título", faturamento_col: "Faturamento (R$)"},
+        color_discrete_sequence=["#e74c3c"]
+    )
+    st.plotly_chart(fig_bottom, use_container_width=True)
+
+    # =======================
+    # 📊 TABELA FINAL COM LINK
+    # =======================
     st.subheader("📊 Faturamento por MLB (item_id, Título e Link)")
 
     df_mlb = (
@@ -700,25 +759,19 @@ def mostrar_anuncios():
         .sort_values(by=faturamento_col, ascending=False)
     )
 
-    # Adiciona link clicável baseado no item_id
     df_mlb['link'] = df_mlb['item_id'].apply(
         lambda x: f"https://www.mercadolivre.com.br/anuncio/{x}"
     )
-
-    # Cria uma cópia formatada para exibir na interface
     df_mlb_display = df_mlb.copy()
     df_mlb_display['total_amount'] = df_mlb_display['total_amount'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
-
-    # Torna os links clicáveis no Streamlit
     df_mlb_display['link'] = df_mlb_display['link'].apply(
         lambda url: f"[🔗 Ver Anúncio]({url})"
     )
 
     st.dataframe(df_mlb_display, use_container_width=True)
 
-    # Exportação CSV sem formatação visual
     csv = df_mlb.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Exportar CSV",
