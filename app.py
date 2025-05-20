@@ -178,7 +178,10 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.item_title,
                    s.status,
                    s.quantity,
+                   s.unit_price,
                    s.total_amount,
+                   s.ml_user_id,
+                   s.buyer_nickname,
                    u.nickname
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
@@ -194,7 +197,10 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.item_title,
                    s.status,
                    s.quantity,
+                   s.unit_price,
                    s.total_amount,
+                   s.ml_user_id,
+                   s.buyer_nickname,
                    u.nickname
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
