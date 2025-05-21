@@ -39,3 +39,5 @@ class Sale(Base):
     zip_code          = Column(String, nullable=True)
     street_name       = Column(String, nullable=True)
     street_number     = Column(String, nullable=True)
+    seller_sku        = Column(String, nullable=True)  # ✅ NOVO CAMPO ADICIONADO
+
