@@ -38,7 +38,7 @@ import requests
 from sqlalchemy import create_engine, text
 from streamlit_option_menu import option_menu
 from typing import Optional
-from ml.sales import sync_all_accounts
+from sales import sync_all_accounts
 from wordcloud import WordCloud
 import altair as alt
 from sklearn.feature_extraction.text import TfidfVectorizer
