@@ -168,6 +168,19 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
     ship     = order.get("shipping") or {}
     addr     = ship.get("receiver_address") or {}
 
+    item_id = item_inf.get("id")
+
+    # 🆕 Pega o seller_sku da API de itens
+    seller_sku = None
+    if item_id:
+        try:
+            item_resp = requests.get(f"https://api.mercadolibre.com/items/{item_id}")
+            if item_resp.ok:
+                item_data = item_resp.json()
+                seller_sku = item_data.get("seller_sku") or item_data.get("seller_custom_field")
+        except Exception as e:
+            print(f"⚠️ Falha ao buscar SKU do item {item_id}: {e}")
+
     return Sale(
         order_id        = str(order["id"]),
         ml_user_id      = int(ml_user_id),
@@ -180,7 +193,7 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
         status          = order.get("status"),
         status_detail   = order.get("status_detail"),
         date_created    = parser.isoparse(order.get("date_created")),
-        item_id         = item_inf.get("id"),
+        item_id         = item_id,
         item_title      = item_inf.get("title"),
         quantity        = item.get("quantity"),
         unit_price      = item.get("unit_price"),
@@ -192,4 +205,5 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
         zip_code        = addr.get("zip_code"),
         street_name     = addr.get("street_name"),
         street_number   = addr.get("street_number"),
+        seller_sku      = seller_sku  # 🆕 campo incluído
     )
