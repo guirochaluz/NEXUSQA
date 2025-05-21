@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from db import SessionLocal
-from models import Sale
+from database.db import SessionLocal
+from database.models import Sale
 
 def reset_sales():
     db = SessionLocal()

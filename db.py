@@ -3,7 +3,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from dotenv import load_dotenv
-from models import Base
+from database.models import Base
 
 # Carrega variáveis de ambiente
 load_dotenv()

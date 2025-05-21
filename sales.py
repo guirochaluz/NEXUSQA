@@ -1,13 +1,17 @@
 import os
 import requests
 from dateutil import parser
-from db import SessionLocal
-from models import Sale
+from database.db import SessionLocal
+from database.models import Sale
 from sqlalchemy import func, text
 from typing import Optional
 from dotenv import load_dotenv
 from dateutil import parser
 from dateutil.tz import tzutc
+from requests.exceptions import HTTPError
+
+
+
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -68,22 +72,18 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
 
 def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     """
-    Coleta apenas as vendas criadas após o último import (date_created),
-    evitando duplicação pelo order_id. Se não houver vendas anteriores,
-    faz um full import.
+    Coleta apenas as vendas criadas após o último import, com retry automático
+    ao receber 401 Unauthorized.
     """
     db = SessionLocal()
     total_saved = 0
 
     try:
-        # 0) Refresh do access_token via backend
+        # 0) Refresh inicial do access_token via backend
         try:
-            refresh_resp = requests.post(
-                f"{BACKEND_URL}/auth/refresh",
-                json={"user_id": ml_user_id}
-            )
-            refresh_resp.raise_for_status()
-            # assume que o novo token foi salvo em user_tokens
+            r = requests.post(f"{BACKEND_URL}/auth/refresh", json={"user_id": ml_user_id})
+            r.raise_for_status()
+            # pega o token atualizado no banco
             new_token = db.execute(
                 text("SELECT access_token FROM user_tokens WHERE ml_user_id = :uid"),
                 {"uid": ml_user_id}
@@ -91,38 +91,62 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
             if new_token:
                 access_token = new_token
         except Exception as e:
-            print(f"⚠️ Falha ao atualizar token para {ml_user_id}: {e}")
+            print(f"⚠️ Falha no refresh inicial de token ({ml_user_id}): {e}")
 
-        # 1) Pega a última data criada no banco
+        # 1) Última data no banco
         last_db_date = (
-            db.query(func.max(Sale.date_created))
+            db.query(func.max(Sale.date_closed))
               .filter(Sale.ml_user_id == int(ml_user_id))
               .scalar()
         )
-        # Se nunca importou nada, faça full import
         if last_db_date is None:
             return get_full_sales(ml_user_id, access_token)
 
-        # Garante que seja offset-aware UTC
         if last_db_date.tzinfo is None:
             last_db_date = last_db_date.replace(tzinfo=tzutc())
 
-        # 2) Chama API pedindo só vendas criadas após last_db_date
+        # 2) Parâmetros da chamada incremental
         params = {
             "seller": ml_user_id,
             "order.status": "paid",
             "limit": FULL_PAGE_SIZE,
             "sort": "date_desc",
-            "order.date_created.from": last_db_date.isoformat(),
+            "order.date_closed.from": last_db_date.isoformat(),
         }
-        resp = requests.get(API_BASE, params=params,
-                            headers={"Authorization": f"Bearer {access_token}"})
-        resp.raise_for_status()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        # 3) Tenta a requisição, faz retry em caso de 401
+        try:
+            resp = requests.get(API_BASE, params=params, headers=headers)
+            resp.raise_for_status()
+        except HTTPError as http_err:
+            if resp.status_code == 401:
+                # renova token de novo
+                print(f"🔄 Token expirado para {ml_user_id}, renovando e retry...")
+                r2 = requests.post(f"{BACKEND_URL}/auth/refresh", json={"user_id": ml_user_id})
+                r2.raise_for_status()
+                # busca o novo token
+                new_token = db.execute(
+                    text("SELECT access_token FROM user_tokens WHERE ml_user_id = :uid"),
+                    {"uid": ml_user_id}
+                ).scalar()
+                if not new_token:
+                    raise RuntimeError("Falha ao obter novo access_token após refresh")
+                access_token = new_token
+                headers = {"Authorization": f"Bearer {access_token}"}
+
+                # retry da chamada
+                resp = requests.get(API_BASE, params=params, headers=headers)
+                resp.raise_for_status()
+            else:
+                # se for outro HTTPError, repassa
+                raise
+
         orders = resp.json().get("results", [])
         if not orders:
             return 0
 
-        # 3) Persiste as novas, checando order_id para não duplicar
+        # 4) Persiste novas vendas
         for o in orders:
             oid = str(o["id"])
             if not db.query(Sale).filter_by(order_id=oid).first():
@@ -168,19 +192,6 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
     ship     = order.get("shipping") or {}
     addr     = ship.get("receiver_address") or {}
 
-    item_id = item_inf.get("id")
-
-    # 🆕 Pega o seller_sku da API de itens
-    seller_sku = None
-    if item_id:
-        try:
-            item_resp = requests.get(f"https://api.mercadolibre.com/items/{item_id}")
-            if item_resp.ok:
-                item_data = item_resp.json()
-                seller_sku = item_data.get("seller_sku") or item_data.get("seller_custom_field")
-        except Exception as e:
-            print(f"⚠️ Falha ao buscar SKU do item {item_id}: {e}")
-
     return Sale(
         order_id        = str(order["id"]),
         ml_user_id      = int(ml_user_id),
@@ -192,8 +203,8 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
         total_amount    = order.get("total_amount"),
         status          = order.get("status"),
         status_detail   = order.get("status_detail"),
-        date_created    = parser.isoparse(order.get("date_created")),
-        item_id         = item_id,
+        date_closed    = parser.isoparse(order.get("date_closed")),
+        item_id         = item_inf.get("id"),
         item_title      = item_inf.get("title"),
         quantity        = item.get("quantity"),
         unit_price      = item.get("unit_price"),
@@ -205,5 +216,4 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
         zip_code        = addr.get("zip_code"),
         street_name     = addr.get("street_name"),
         street_number   = addr.get("street_number"),
-        seller_sku      = seller_sku  # 🆕 campo incluído
     )
