@@ -520,7 +520,7 @@ def mostrar_dashboard():
 
     
     # agrupa e calcula média
-    gb = df.groupby(["dia", "data_local"])["total_amount"].sum().reset_index()
+    gb = df.groupby(["dia", "date_adjusted"])["total_amount"].sum().reset_index()
     ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
     
     fig_bar = px.bar(
