@@ -871,10 +871,8 @@ def mostrar_relatorios():
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
 
-    # 1. Consulta a tabela SKU
+    # 1️⃣ Consulta a tabela SKU (id fica oculto na interface)
     df_sku = pd.read_sql("SELECT * FROM sku ORDER BY sku", engine)
-
-    # Oculta o campo ID da visualização
     df_visivel = df_sku.drop(columns=["id"])
 
     st.markdown("### 🧾 Base de SKUs Cadastrados")
@@ -885,67 +883,76 @@ def mostrar_gestao_sku():
         key="editor_sku"
     )
 
-    # 2. Salvar alterações manuais
+    # 2️⃣ Salvar alterações feitas na própria tabela
     if st.button("💾 Salvar Alterações na Tabela"):
         try:
             with engine.begin() as conn:
                 for _, row in df_editado.iterrows():
                     sku = row["sku"]
                     row_dict = row.to_dict()
-                    row_dict["id"] = int(df_sku[df_sku["sku"] == sku]["id"].values[0])
+                    # Recupera o id real da linha original
+                    row_dict["id"] = int(df_sku.loc[df_sku["sku"] == sku, "id"].values[0])
                     conn.execute(text("""
                         UPDATE sku
-                           SET level1 = :level1,
-                               level2 = :level2,
+                           SET level1         = :level1,
+                               level2         = :level2,
                                custo_unitario = :custo_unitario,
-                               quantity = :quantity
+                               quantity       = :quantity
                          WHERE id = :id
                     """), row_dict)
             st.success("✅ Alterações salvas com sucesso!")
-            st.experimental_rerun()
+            st.rerun()
         except Exception as e:
             st.error(f"❌ Erro ao salvar: {e}")
 
-    # 3. Botão para excluir linhas selecionadas
+    # 3️⃣ Botão para excluir SKUs selecionados
+    st.markdown("---")
     st.markdown("### 🗑️ Excluir SKUs Selecionados")
-    skus_para_excluir = st.multiselect("Selecione os SKUs a excluir:", df_visivel["sku"].tolist())
+    skus_para_excluir = st.multiselect(
+        "Selecione os SKUs a excluir:",
+        df_visivel["sku"].tolist()
+    )
 
     if st.button("❌ Excluir Selecionados"):
-        try:
-            with engine.begin() as conn:
-                for sku in skus_para_excluir:
-                    conn.execute(text("DELETE FROM sku WHERE sku = :sku"), {"sku": sku})
-            st.success("✅ SKUs excluídos com sucesso!")
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"❌ Erro ao excluir: {e}")
+        if not skus_para_excluir:
+            st.warning("⚠️ Nenhum SKU selecionado.")
+        else:
+            try:
+                with engine.begin() as conn:
+                    for sku in skus_para_excluir:
+                        conn.execute(text("DELETE FROM sku WHERE sku = :sku"), {"sku": sku})
+                st.success("✅ SKUs excluídos com sucesso!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Erro ao excluir: {e}")
 
     st.markdown("---")
 
-    # 4. Exportar modelo Excel
+    # 4️⃣ Exportar modelo Excel
     modelo = pd.DataFrame(columns=["sku", "level1", "level2", "custo_unitario", "quantity"])
-    output = io.BytesIO()
-    modelo.to_excel(output, index=False, engine="openpyxl")
-    modelo_bytes = output.getvalue()
-
+    buffer = io.BytesIO()
+    modelo.to_excel(buffer, index=False, engine="openpyxl")
     st.download_button(
         label="⬇️ Baixar Modelo Excel",
-        data=modelo_bytes,
+        data=buffer.getvalue(),
         file_name="modelo_sku.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # 5. Upload de planilha com botão separado para processar
+    # 5️⃣ Upload da planilha e processamento sob demanda
     st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
     arquivo = st.file_uploader("Selecione um arquivo Excel (.xlsx)", type=["xlsx"])
-    
-    if arquivo:
+
+    if arquivo is not None:
         df_novo = pd.read_excel(arquivo)
         colunas_esperadas = {"sku", "level1", "level2", "custo_unitario", "quantity"}
 
         if not colunas_esperadas.issubset(df_novo.columns):
-            st.error("❌ Colunas inválidas. Verifique se o arquivo tem: sku, level1, level2, custo_unitario, quantity.")
+            st.error("❌ Colunas inválidas. Verifique se o arquivo contém: sku, level1, level2, custo_unitario, quantity.")
         else:
+            # Normaliza quantity (NaN → 0) e garante tipo int
+            df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
+
             if st.button("✅ Processar Planilha e Atualizar"):
                 try:
                     with engine.begin() as conn:
@@ -955,13 +962,14 @@ def mostrar_gestao_sku():
                                 VALUES (:sku, :level1, :level2, :custo_unitario, :quantity)
                                 ON CONFLICT (sku)
                                 DO UPDATE SET
-                                    level1 = EXCLUDED.level1,
-                                    level2 = EXCLUDED.level2,
+                                    level1         = EXCLUDED.level1,
+                                    level2         = EXCLUDED.level2,
                                     custo_unitario = EXCLUDED.custo_unitario,
-                                    quantity = EXCLUDED.quantity
+                                    quantity       = EXCLUDED.quantity
                             """), row.to_dict())
+
                     st.success("✅ Planilha importada com sucesso e dados atualizados!")
-                    st.experimental_rerun()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ Erro ao processar o arquivo: {e}")
 
