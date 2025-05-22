@@ -546,10 +546,11 @@ def mostrar_dashboard():
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
     st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
     
-    # Extrai hora da venda
+    # Extrai hora e data
     df["hora"] = df["date_adjusted"].dt.hour
+    df["data"] = df["date_adjusted"].dt.date
     
-    # 1️⃣ Calcula média por hora do dia, depois acumula
+    # Agrupa por hora para calcular a média e acumular
     media_por_hora = (
         df.groupby("hora")["total_amount"]
           .mean()
@@ -557,41 +558,40 @@ def mostrar_dashboard():
           .reset_index(name="Valor Médio Acumulado")
     )
     
-    # 2️⃣ Agora calcula o ponto final: média do faturamento diário até a hora atual
-    hora_atual = pd.Timestamp.now().hour
+    # Verifica se o filtro é para o dia de hoje (comparando intervalo)
+    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").date()
+    filtro_hoje = (de == ate) and (de == hoje)
     
-    # Filtra somente as vendas até a hora atual de cada dia
-    df["data"] = df["date_adjusted"].dt.date
-    df["hora"] = df["date_adjusted"].dt.hour
-    df_ate_agora = df[df["hora"] <= hora_atual]
+    if filtro_hoje:
+        hora_atual = pd.Timestamp.now(tz="America/Sao_Paulo").hour
     
-    # Soma total de cada dia (até a hora atual)
-    faturamento_dia_ate_hora = df_ate_agora.groupby("data")["total_amount"].sum()
+        # Filtra apenas vendas até a hora atual de hoje
+        df_hoje = df[(df["data"] == hoje) & (df["hora"] <= hora_atual)]
     
-    # Calcula a média entre os dias
-    media_final = faturamento_dia_ate_hora.mean()
+        # Soma o total vendido hoje até agora
+        faturamento_ate_agora = df_hoje["total_amount"].sum()
     
-    # Adiciona o ponto extra ao gráfico com a hora atual e a média acumulada até ela
-    media_por_hora = pd.concat([
-        media_por_hora,
-        pd.DataFrame([{
-            "hora": hora_atual,
-            "Valor Médio Acumulado": media_final
-        }])
-    ], ignore_index=True)
+        # Adiciona esse ponto ao gráfico
+        media_por_hora = pd.concat([
+            media_por_hora,
+            pd.DataFrame([{
+                "hora": hora_atual,
+                "Valor Médio Acumulado": faturamento_ate_agora
+            }])
+        ], ignore_index=True)
     
-    # Garante que não fique duplicado
-    media_por_hora = media_por_hora.groupby("hora").last().reset_index()
+        # Garante que a hora atual fique como o último ponto válido
+        media_por_hora = media_por_hora.groupby("hora").last().reset_index()
     
     # Plota o gráfico
     fig_hora = px.line(
         media_por_hora,
         x="hora",
         y="Valor Médio Acumulado",
-        title="⏰ Faturamento Acumulado por Hora (Média por Dia no Período)",
+        title="⏰ Faturamento Acumulado por Hora",
         labels={
             "hora": "Hora do Dia",
-            "Valor Médio Acumulado": "Média Acumulada (R$)"
+            "Valor Médio Acumulado": "Valor Acumulado (R$)"
         },
         color_discrete_sequence=["#27ae60"],
         markers=True
@@ -599,6 +599,7 @@ def mostrar_dashboard():
     fig_hora.update_layout(xaxis=dict(dtick=1))
     
     st.plotly_chart(fig_hora, use_container_width=True)
+
 
 
 def mostrar_contas_cadastradas():
