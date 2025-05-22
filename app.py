@@ -525,19 +525,30 @@ def mostrar_dashboard():
 
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
-    dias = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
-    df["dia"] = df["date_closed"].dt.day_name().map({
-        "Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
-        "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"
+    
+    dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    
+    # ✅ converte apenas para este gráfico
+    df["dia"] = df["date_closed"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").day_name().map({
+        "Monday": "Segunda", "Tuesday": "Terça", "Wednesday": "Quarta",
+        "Thursday": "Quinta", "Friday": "Sexta", "Saturday": "Sábado", "Sunday": "Domingo"
     })
-    gb = df.groupby(["dia", df["date_closed"].dt.date])["total_amount"].sum().reset_index()
+    
+    # ✅ extrai a data local também para agrupar corretamente
+    df["data_local"] = df["date_closed"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.date
+    
+    # agrupa e calcula média
+    gb = df.groupby(["dia", "data_local"])["total_amount"].sum().reset_index()
     ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
+    
     fig_bar = px.bar(
         ab, x="dia", y="total_amount", text_auto=".2s",
-        labels={"dia":"Dia","total_amount":"Média"},
+        labels={"dia": "Dia", "total_amount": "Média"},
         color_discrete_sequence=["#27ae60"]
     )
+    
     st.plotly_chart(fig_bar, use_container_width=True, theme="streamlit")
+
 
 
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
