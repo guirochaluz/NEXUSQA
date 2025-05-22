@@ -871,25 +871,19 @@ def mostrar_relatorios():
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
 
-    # 1. Consulta a tabela SKU
-    df_sku = pd.read_sql("SELECT * FROM sku ORDER BY nickname, sku", engine)
-
-    # 2. Filtro por nickname
-    apelidos = df_sku["nickname"].unique().tolist()
-    filtro_nick = st.multiselect("🔎 Filtrar por Nickname", apelidos, default=apelidos)
-
-    df_filtrado = df_sku[df_sku["nickname"].isin(filtro_nick)]
+    # 1. Consulta a tabela SKU (sem nickname)
+    df_sku = pd.read_sql("SELECT * FROM sku ORDER BY sku", engine)
 
     st.markdown("### 🧾 Base de SKUs Cadastrados")
     df_editado = st.data_editor(
-        df_filtrado,
+        df_sku,
         use_container_width=True,
         num_rows="dynamic",
-        disabled=["id", "nickname"],
+        disabled=["id"],
         key="editor_sku"
     )
 
-    # 3. Botão para salvar alterações feitas manualmente na interface
+    # 2. Botão para salvar alterações feitas manualmente na interface
     if st.button("💾 Salvar Alterações na Tabela"):
         try:
             with engine.begin() as conn:
@@ -909,16 +903,13 @@ def mostrar_gestao_sku():
 
     st.markdown("---")
 
-    # 4. Exportar modelo Excel com as colunas
-    modelo = pd.DataFrame(columns=["nickname", "sku", "level1", "level2", "custo_unitario", "quantity"])
-    
-    # Escreve o DataFrame em um buffer de memória
+    # 3. Exportar modelo Excel sem nickname
+    modelo = pd.DataFrame(columns=["sku", "level1", "level2", "custo_unitario", "quantity"])
     import io
     output = io.BytesIO()
     modelo.to_excel(output, index=False, engine="openpyxl")
     modelo_bytes = output.getvalue()
-    
-    # Botão para download
+
     st.download_button(
         label="⬇️ Baixar Modelo Excel",
         data=modelo_bytes,
@@ -926,25 +917,25 @@ def mostrar_gestao_sku():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # 5. Upload de planilha para inserir/atualizar
+    # 4. Upload de planilha para inserir/atualizar
     st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
     arquivo = st.file_uploader("Selecione um arquivo Excel (.xlsx)", type=["xlsx"])
 
     if arquivo:
         try:
             df_novo = pd.read_excel(arquivo)
-            colunas_esperadas = {"nickname", "sku", "level1", "level2", "custo_unitario", "quantity"}
+            colunas_esperadas = {"sku", "level1", "level2", "custo_unitario", "quantity"}
 
             if not colunas_esperadas.issubset(df_novo.columns):
-                st.error("❌ Colunas inválidas. Verifique se o arquivo tem: nickname, sku, level1, level2, custo_unitario, quantity.")
+                st.error("❌ Colunas inválidas. Verifique se o arquivo tem: sku, level1, level2, custo_unitario, quantity.")
                 return
 
             with engine.begin() as conn:
                 for _, row in df_novo.iterrows():
                     conn.execute(text("""
-                        INSERT INTO sku (nickname, sku, level1, level2, custo_unitario, quantity)
-                        VALUES (:nickname, :sku, :level1, :level2, :custo_unitario, :quantity)
-                        ON CONFLICT (nickname, sku)
+                        INSERT INTO sku (sku, level1, level2, custo_unitario, quantity)
+                        VALUES (:sku, :level1, :level2, :custo_unitario, :quantity)
+                        ON CONFLICT (sku)
                         DO UPDATE SET
                             level1 = EXCLUDED.level1,
                             level2 = EXCLUDED.level2,
@@ -957,41 +948,41 @@ def mostrar_gestao_sku():
 
         except Exception as e:
             st.error(f"❌ Erro ao processar o arquivo: {e}")
-        st.markdown("---")
+
+    st.markdown("---")
     st.markdown("### ➕ Adicionar Novo SKU Manualmente")
 
     with st.expander("📋 Novo SKU"):
         with st.form("form_novo_sku"):
             col1, col2 = st.columns(2)
-            nickname = col1.text_input("Nickname da Conta")
-            sku = col2.text_input("Código do SKU")
-
-            level1 = col1.text_input("Level 1 (Categoria Principal)")
-            level2 = col2.text_input("Level 2 (Subcategoria)")
+            sku = col1.text_input("Código do SKU")
+            level1 = col2.text_input("Level 1 (Categoria Principal)")
 
             col3, col4 = st.columns(2)
-            custo_unitario = col3.number_input("Custo Unitário (R$)", min_value=0.0, step=0.01, format="%.2f")
-            quantity = col4.number_input("Quantidade em Estoque", min_value=0, step=1)
+            level2 = col3.text_input("Level 2 (Subcategoria)")
+            custo_unitario = col4.number_input("Custo Unitário (R$)", min_value=0.0, step=0.01, format="%.2f")
+
+            col5, col6 = st.columns(2)
+            quantity = col5.number_input("Quantidade em Estoque", min_value=0, step=1)
 
             submitted = st.form_submit_button("✅ Cadastrar")
 
             if submitted:
-                if not nickname or not sku:
-                    st.warning("⚠️ Preencha pelo menos o nickname e o código do SKU.")
+                if not sku:
+                    st.warning("⚠️ O campo SKU é obrigatório.")
                 else:
                     try:
                         with engine.begin() as conn:
                             conn.execute(text("""
-                                INSERT INTO sku (nickname, sku, level1, level2, custo_unitario, quantity)
-                                VALUES (:nickname, :sku, :level1, :level2, :custo_unitario, :quantity)
-                                ON CONFLICT (nickname, sku)
+                                INSERT INTO sku (sku, level1, level2, custo_unitario, quantity)
+                                VALUES (:sku, :level1, :level2, :custo_unitario, :quantity)
+                                ON CONFLICT (sku)
                                 DO UPDATE SET
                                     level1 = EXCLUDED.level1,
                                     level2 = EXCLUDED.level2,
                                     custo_unitario = EXCLUDED.custo_unitario,
                                     quantity = EXCLUDED.quantity
                             """), {
-                                "nickname": nickname,
                                 "sku": sku,
                                 "level1": level1,
                                 "level2": level2,
