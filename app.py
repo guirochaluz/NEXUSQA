@@ -951,7 +951,7 @@ def mostrar_gestao_sku():
             st.error("❌ Colunas inválidas. Verifique se o arquivo contém: sku, level1, level2, custo_unitario, quantity.")
         else:
             # Normaliza quantity (NaN → 0) e garante tipo int
-            df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
+            df_novo["quantity"] = df_novo["quantity"].fillna(1).astype(int)
 
             if st.button("✅ Processar Planilha e Atualizar"):
                 try:
