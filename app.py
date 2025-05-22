@@ -868,12 +868,22 @@ def mostrar_relatorios():
     )
 
 
+import pandas as pd
+import streamlit as st
+from sqlalchemy import text
+import io
+
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
 
-    # 1️⃣ Consulta a tabela SKU (id fica oculto na interface)
-    df_sku = pd.read_sql("SELECT * FROM sku ORDER BY sku", engine)
-    df_visivel = df_sku.drop(columns=["id"])
+    # 1️⃣ Consulta: apenas a versão mais recente de cada SKU
+    df_sku = pd.read_sql("""
+        SELECT DISTINCT ON (sku) *
+        FROM sku
+        ORDER BY sku, date_created DESC
+    """, engine)
+
+    df_visivel = df_sku.drop(columns=["id", "date_created"])
 
     st.markdown("### 🧾 Base de SKUs Cadastrados")
     df_editado = st.data_editor(
@@ -883,24 +893,32 @@ def mostrar_gestao_sku():
         key="editor_sku"
     )
 
-    # 2️⃣ Salvar alterações feitas na própria tabela
+    # 2️⃣ Salvar alterações feitas na tabela
     if st.button("💾 Salvar Alterações na Tabela"):
         try:
             with engine.begin() as conn:
                 for _, row in df_editado.iterrows():
                     sku = row["sku"]
                     row_dict = row.to_dict()
-                    # Recupera o id real da linha original
-                    row_dict["id"] = int(df_sku.loc[df_sku["sku"] == sku, "id"].values[0])
-                    conn.execute(text("""
-                        UPDATE sku
-                           SET level1         = :level1,
-                               level2         = :level2,
-                               custo_unitario = :custo_unitario,
-                               quantity       = :quantity
-                         WHERE id = :id
-                    """), row_dict)
-            st.success("✅ Alterações salvas com sucesso!")
+
+                    # Verifica se há alteração comparado à versão mais recente
+                    result = conn.execute(text("""
+                        SELECT 1 FROM sku
+                        WHERE sku = :sku
+                          AND level1 = :level1
+                          AND level2 = :level2
+                          AND custo_unitario = :custo_unitario
+                          AND quantity = :quantity
+                        LIMIT 1
+                    """), row_dict).fetchone()
+
+                    if result is None:
+                        conn.execute(text("""
+                            INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
+                            VALUES (:sku, :level1, :level2, :custo_unitario, :quantity, NOW())
+                        """), row_dict)
+
+            st.success("✅ Novas versões salvas com sucesso!")
             st.rerun()
         except Exception as e:
             st.error(f"❌ Erro ao salvar: {e}")
@@ -908,10 +926,7 @@ def mostrar_gestao_sku():
     # 3️⃣ Botão para excluir SKUs selecionados
     st.markdown("---")
     st.markdown("### 🗑️ Excluir SKUs Selecionados")
-    skus_para_excluir = st.multiselect(
-        "Selecione os SKUs a excluir:",
-        df_visivel["sku"].tolist()
-    )
+    skus_para_excluir = st.multiselect("Selecione os SKUs a excluir:", df_visivel["sku"].tolist())
 
     if st.button("❌ Excluir Selecionados"):
         if not skus_para_excluir:
@@ -939,7 +954,7 @@ def mostrar_gestao_sku():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # 5️⃣ Upload da planilha e processamento sob demanda
+    # 5️⃣ Upload de planilha e processamento controlado
     st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
     arquivo = st.file_uploader("Selecione um arquivo Excel (.xlsx)", type=["xlsx"])
 
@@ -950,29 +965,35 @@ def mostrar_gestao_sku():
         if not colunas_esperadas.issubset(df_novo.columns):
             st.error("❌ Colunas inválidas. Verifique se o arquivo contém: sku, level1, level2, custo_unitario, quantity.")
         else:
-            # Normaliza quantity (NaN → 0) e garante tipo int
-            df_novo["quantity"] = df_novo["quantity"].fillna(1).astype(int)
+            df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
 
             if st.button("✅ Processar Planilha e Atualizar"):
                 try:
                     with engine.begin() as conn:
                         for _, row in df_novo.iterrows():
-                            conn.execute(text("""
-                                INSERT INTO sku (sku, level1, level2, custo_unitario, quantity)
-                                VALUES (:sku, :level1, :level2, :custo_unitario, :quantity)
-                                ON CONFLICT (sku)
-                                DO UPDATE SET
-                                    level1         = EXCLUDED.level1,
-                                    level2         = EXCLUDED.level2,
-                                    custo_unitario = EXCLUDED.custo_unitario,
-                                    quantity       = EXCLUDED.quantity
-                            """), row.to_dict())
+                            row_dict = row.to_dict()
 
-                    st.success("✅ Planilha importada com sucesso e dados atualizados!")
+                            # Verifica se o SKU já existe com os mesmos dados
+                            result = conn.execute(text("""
+                                SELECT 1 FROM sku
+                                WHERE sku = :sku
+                                  AND level1 = :level1
+                                  AND level2 = :level2
+                                  AND custo_unitario = :custo_unitario
+                                  AND quantity = :quantity
+                                LIMIT 1
+                            """), row_dict).fetchone()
+
+                            if result is None:
+                                conn.execute(text("""
+                                    INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
+                                    VALUES (:sku, :level1, :level2, :custo_unitario, :quantity, NOW())
+                                """), row_dict)
+
+                    st.success("✅ Planilha importada com sucesso e novas versões salvas!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Erro ao processar o arquivo: {e}")
-
             
     
 # Funções para cada página
