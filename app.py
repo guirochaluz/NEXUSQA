@@ -994,6 +994,41 @@ def mostrar_gestao_sku():
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Erro ao processar o arquivo: {e}")
+    # 6️⃣ Upload da planilha de relação SKU ↔ MLB
+    st.markdown("---")
+    st.markdown("### 🔄 Planilha de Relação SKU com MLB")
+
+    arquivo_relacao = st.file_uploader("Selecione a planilha de relação (SKU + MLB)", type=["xlsx"], key="relacao_skumlb")
+
+    if arquivo_relacao:
+        df_relacao = pd.read_excel(arquivo_relacao)
+        colunas_esperadas = {"sku", "mlb"}
+
+        if not colunas_esperadas.issubset(df_relacao.columns):
+            st.error("❌ A planilha precisa conter as colunas: sku e mlb.")
+        else:
+            if st.button("📥 Processar Planilha de SKU-MLB"):
+                try:
+                    with engine.begin() as conn:
+                        for _, row in df_relacao.iterrows():
+                            conn.execute(text("""
+                                INSERT INTO skumlb (sku, mlb)
+                                VALUES (:sku, :mlb)
+                                ON CONFLICT (sku, mlb) DO NOTHING
+                            """), row.to_dict())
+                    st.success("✅ Relações SKU-MLB importadas com sucesso!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Erro ao importar a planilha: {e}")
+
+    # 7️⃣ Visualização das relações cadastradas
+    st.markdown("### 📄 Relações SKU ↔ MLB Cadastradas")
+    try:
+        df_skumlb = pd.read_sql("SELECT * FROM skumlb ORDER BY sku", engine)
+        st.dataframe(df_skumlb, use_container_width=True)
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar relações: {e}")
+
             
     
 # Funções para cada página
