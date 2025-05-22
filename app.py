@@ -998,11 +998,11 @@ def mostrar_gestao_sku():
                 except Exception as e:
                     st.error(f"❌ Erro ao processar: {e}")
 
-    # 6️⃣ Planilha de relação SKU + MLB
+    # 6️⃣ Planilha de relação SKU ↔ MLB
     st.markdown("---")
-    st.markdown("### 🔄 Relação SKU com MLB")
+    st.markdown("### 🔄 Planilha de Relação SKU com MLB")
 
-    # Botão para baixar modelo
+    # Botão para baixar modelo da relação SKU ↔ MLB
     modelo_relacao = pd.DataFrame(columns=["sku", "mlb"])
     buffer_rel = io.BytesIO()
     modelo_relacao.to_excel(buffer_rel, index=False, engine="openpyxl")
@@ -1013,14 +1013,15 @@ def mostrar_gestao_sku():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    arquivo_relacao = st.file_uploader("Importe uma planilha com sku e mlb", type=["xlsx"], key="relacao_skumlb")
+    # Upload da planilha preenchida
+    arquivo_relacao = st.file_uploader("Selecione a planilha de relação (SKU + MLB)", type=["xlsx"], key="relacao_skumlb")
 
     if arquivo_relacao:
         df_relacao = pd.read_excel(arquivo_relacao)
         colunas_esperadas = {"sku", "mlb"}
 
         if not colunas_esperadas.issubset(df_relacao.columns):
-            st.error("❌ A planilha precisa conter: sku e mlb.")
+            st.error("❌ A planilha precisa conter as colunas: sku e mlb.")
         else:
             if st.button("📥 Processar Planilha de SKU-MLB"):
                 try:
@@ -1031,17 +1032,18 @@ def mostrar_gestao_sku():
                                 VALUES (:sku, :mlb)
                                 ON CONFLICT (sku, mlb) DO NOTHING
                             """), row.to_dict())
-                    st.success("✅ Relações importadas com sucesso!")
+                    st.success("✅ Relações SKU-MLB importadas com sucesso!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Erro ao importar a planilha: {e}")
 
-    # 7️⃣ Visualização da tabela skumlb
+    # 7️⃣ Visualização da base já cadastrada
+    st.markdown("### 📄 Relações SKU ↔ MLB Cadastradas")
     try:
         df_skumlb = pd.read_sql("SELECT * FROM skumlb ORDER BY sku", engine)
         st.dataframe(df_skumlb, use_container_width=True)
     except Exception as e:
-        st.error(f"❌ Erro ao carregar tabela skumlb: {e}")
+        st.error(f"❌ Erro ao carregar relações: {e}")
 
             
     
