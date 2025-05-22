@@ -529,7 +529,7 @@ def mostrar_dashboard():
     dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     
     # ✅ converte apenas para este gráfico
-    df["dia"] = df["date_closed"].dt.tz_convert("America/Sao_Paulo").dt.day_name().map({
+    df["dia"] = df["date_closed"].dt.day_name().map({
         "Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
         "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"
     })
