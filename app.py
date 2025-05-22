@@ -865,15 +865,90 @@ def mostrar_relatorios():
         file_name="relatorio_vendas.csv",
         mime="text/csv"
     )
-    
-# Funções para cada página
-def mostrar_expedicao_logistica():
-    st.header("🚚 Expedição e Logística")
-    st.info("Em breve...")
 
 
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
+
+    # 1. Consulta a tabela SKU
+    df_sku = pd.read_sql("SELECT * FROM sku ORDER BY nickname, sku", engine)
+
+    # 2. Filtro por nickname
+    apelidos = df_sku["nickname"].unique().tolist()
+    filtro_nick = st.multiselect("🔎 Filtrar por Nickname", apelidos, default=apelidos)
+
+    df_filtrado = df_sku[df_sku["nickname"].isin(filtro_nick)]
+
+    st.markdown("### 🧾 Base de SKUs Cadastrados")
+    df_editado = st.data_editor(
+        df_filtrado,
+        use_container_width=True,
+        num_rows="dynamic",
+        disabled=["id", "nickname"],
+        key="editor_sku"
+    )
+
+    # 3. Botão para salvar alterações feitas manualmente na interface
+    if st.button("💾 Salvar Alterações na Tabela"):
+        try:
+            with engine.begin() as conn:
+                for _, row in df_editado.iterrows():
+                    conn.execute(text("""
+                        UPDATE sku
+                           SET sku = :sku,
+                               level1 = :level1,
+                               level2 = :level2,
+                               custo_unitario = :custo_unitario,
+                               quantity = :quantity
+                         WHERE id = :id
+                    """), row.to_dict())
+            st.success("✅ Alterações salvas com sucesso!")
+        except Exception as e:
+            st.error(f"❌ Erro ao salvar: {e}")
+
+    st.markdown("---")
+
+    # 4. Exportar modelo Excel com as colunas
+    modelo = pd.DataFrame(columns=["nickname", "sku", "level1", "level2", "custo_unitario", "quantity"])
+    modelo_bytes = modelo.to_excel(index=False, engine="openpyxl")
+    st.download_button("⬇️ Baixar Modelo Excel", modelo_bytes, "modelo_sku.xlsx")
+
+    # 5. Upload de planilha para inserir/atualizar
+    st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
+    arquivo = st.file_uploader("Selecione um arquivo Excel (.xlsx)", type=["xlsx"])
+
+    if arquivo:
+        try:
+            df_novo = pd.read_excel(arquivo)
+            colunas_esperadas = {"nickname", "sku", "level1", "level2", "custo_unitario", "quantity"}
+
+            if not colunas_esperadas.issubset(df_novo.columns):
+                st.error("❌ Colunas inválidas. Verifique se o arquivo tem: nickname, sku, level1, level2, custo_unitario, quantity.")
+                return
+
+            with engine.begin() as conn:
+                for _, row in df_novo.iterrows():
+                    conn.execute(text("""
+                        INSERT INTO sku (nickname, sku, level1, level2, custo_unitario, quantity)
+                        VALUES (:nickname, :sku, :level1, :level2, :custo_unitario, :quantity)
+                        ON CONFLICT (nickname, sku)
+                        DO UPDATE SET
+                            level1 = EXCLUDED.level1,
+                            level2 = EXCLUDED.level2,
+                            custo_unitario = EXCLUDED.custo_unitario,
+                            quantity = EXCLUDED.quantity
+                    """), row.to_dict())
+
+            st.success("✅ Planilha importada com sucesso e dados atualizados!")
+            st.experimental_rerun()
+
+        except Exception as e:
+            st.error(f"❌ Erro ao processar o arquivo: {e}")
+            
+    
+# Funções para cada página
+def mostrar_expedicao_logistica():
+    st.header("🚚 Expedição e Logística")
     st.info("Em breve...")
 
 def mostrar_gestao_despesas():
