@@ -1058,47 +1058,95 @@ def mostrar_configuracoes():
 
     # 1️⃣ Métricas principais
     with engine.begin() as conn:
-        encontrados = conn.execute(text("""
-            SELECT COUNT(*) FROM sales
-            WHERE item_id IN (SELECT mlb FROM skumlb)
-        """)).scalar()
-
-        sem_preco = conn.execute(text("""
+        total_com_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE sku IS NOT NULL")).scalar()
+        total_sem_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE sku IS NULL")).scalar()
+        total_sem_preco = conn.execute(text("""
             SELECT COUNT(*) FROM sales
             WHERE sku IS NOT NULL AND custo_unitario IS NULL
         """)).scalar()
 
-    col1, col2 = st.columns(2)
-    col1.metric("🟢 Vendas com SKU vinculado", encontrados)
-    col2.metric("🔴 SKUs sem preço cadastrado", sem_preco)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🔗 Vendas com SKU", total_com_sku)
+    col2.metric("🚫 Vendas sem SKU", total_sem_sku)
+    col3.metric("❌ SKUs sem Preço", total_sem_preco)
 
     st.markdown("---")
-    st.markdown("### 📋 Diagnóstico de Inconsistências nos SKUs")
+    st.markdown("### 🔍 Filtros de Diagnóstico")
 
-    # 2️⃣ Consulta da base com possíveis inconsistências
+    # 2️⃣ Consulta base
     df = pd.read_sql(text("""
-        SELECT item_id, sku, level1, level2, custo_unitario
+        SELECT id, item_id, sku, level1, level2, custo_unitario
         FROM sales
         ORDER BY date_closed DESC
     """), engine)
 
-    # 3️⃣ Filtros de inconsistência
-    col1, col2, col3, col4 = st.columns(4)
-    filtrar_sku_nulo = col1.checkbox("SKU nulo", value=True)
-    filtrar_level1_nulo = col2.checkbox("Level1 nulo", value=True)
-    filtrar_level2_nulo = col3.checkbox("Level2 nulo", value=True)
-    filtrar_preco_nulo = col4.checkbox("Preço Unitário nulo", value=True)
+    # 3️⃣ Filtros dinâmicos
+    colf1, colf2, colf3, colf4, colf5 = st.columns([1.2, 1.2, 1.2, 1.2, 2])
+    op_sku     = colf1.selectbox("SKU", ["Todos", "Nulo", "Não Nulo"])
+    op_level1  = colf2.selectbox("Level1", ["Todos", "Nulo", "Não Nulo"])
+    op_level2  = colf3.selectbox("Level2", ["Todos", "Nulo", "Não Nulo"])
+    op_preco   = colf4.selectbox("Preço Unitário", ["Todos", "Nulo", "Não Nulo"])
+    filtro_txt = colf5.text_input("🔎 Pesquisa (MLB, SKU, Level1, Level2)")
 
-    if filtrar_sku_nulo:
+    if op_sku == "Nulo":
         df = df[df["sku"].isna()]
-    if filtrar_level1_nulo:
-        df = df[df["level1"].isna()]
-    if filtrar_level2_nulo:
-        df = df[df["level2"].isna()]
-    if filtrar_preco_nulo:
-        df = df[df["custo_unitario"].isna()]
+    elif op_sku == "Não Nulo":
+        df = df[df["sku"].notna()]
 
-    st.dataframe(df, use_container_width=True)
+    if op_level1 == "Nulo":
+        df = df[df["level1"].isna()]
+    elif op_level1 == "Não Nulo":
+        df = df[df["level1"].notna()]
+
+    if op_level2 == "Nulo":
+        df = df[df["level2"].isna()]
+    elif op_level2 == "Não Nulo":
+        df = df[df["level2"].notna()]
+
+    if op_preco == "Nulo":
+        df = df[df["custo_unitario"].isna()]
+    elif op_preco == "Não Nulo":
+        df = df[df["custo_unitario"].notna()]
+
+    if filtro_txt:
+        filtro_txt = filtro_txt.lower()
+        df = df[df.apply(lambda row: filtro_txt in str(row["item_id"]).lower()
+                         or filtro_txt in str(row["sku"]).lower()
+                         or filtro_txt in str(row["level1"]).lower()
+                         or filtro_txt in str(row["level2"]).lower(), axis=1)]
+
+    # 4️⃣ Editor de dados
+    st.markdown("### ✏️ Editar Dados Inconsistentes")
+    df_editado = st.data_editor(
+        df,
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_config",
+        disabled=["id", "item_id"]
+    )
+
+    if st.button("💾 Salvar Alterações"):
+        try:
+            with engine.begin() as conn:
+                for _, row in df_editado.iterrows():
+                    conn.execute(text("""
+                        UPDATE sales
+                           SET sku = :sku,
+                               level1 = :level1,
+                               level2 = :level2,
+                               custo_unitario = :custo_unitario
+                         WHERE id = :id
+                    """), {
+                        "sku": row["sku"],
+                        "level1": row["level1"],
+                        "level2": row["level2"],
+                        "custo_unitario": row["custo_unitario"],
+                        "id": row["id"]
+                    })
+            st.success("✅ Alterações salvas com sucesso!")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"❌ Erro ao salvar alterações: {e}")
 
     
 # Funções para cada página
