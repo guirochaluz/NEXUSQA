@@ -957,46 +957,51 @@ def mostrar_gestao_sku():
     )
 
     # 5️⃣ Upload de Planilha SKU
-    st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
-    arquivo = st.file_uploader("Selecione um arquivo Excel (.xlsx)", type=["xlsx"])
+st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
+arquivo = st.file_uploader("Selecione um arquivo Excel (.xlsx)", type=["xlsx"])
 
-    if arquivo is not None:
-        df_novo = pd.read_excel(arquivo)
-        colunas_esperadas = {"sku", "level1", "level2", "custo_unitario", "quantity"}
+if arquivo is not None:
+    df_novo = pd.read_excel(arquivo)
+    colunas_esperadas = {"sku", "level1", "level2", "custo_unitario", "quantity"}
 
-        if not colunas_esperadas.issubset(df_novo.columns):
-            st.error("❌ A planilha deve conter: sku, level1, level2, custo_unitario, quantity.")
-        else:
-            if st.button("✅ Processar Planilha e Atualizar"):
-                try:
-                    df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
-                    df_novo["custo_unitario"] = df_novo["custo_unitario"].fillna(0).astype(float)
-                    df_novo["sku"] = df_novo["sku"].astype(str).str.strip()
-                    df_novo["level1"] = df_novo["level1"].astype(str).str.strip()
-                    df_novo["level2"] = df_novo["level2"].astype(str).str.strip()
+    if not colunas_esperadas.issubset(df_novo.columns):
+        st.error("❌ A planilha deve conter: sku, level1, level2, custo_unitario, quantity.")
+    else:
+        if st.button("✅ Processar Planilha e Atualizar"):
+            try:
+                # Normalização dos dados
+                df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
+                df_novo["custo_unitario"] = df_novo["custo_unitario"].fillna(0).astype(float)
+                df_novo["sku"] = df_novo["sku"].astype(str).str.strip()
+                df_novo["level1"] = df_novo["level1"].astype(str).str.strip()
+                df_novo["level2"] = df_novo["level2"].astype(str).str.strip()
 
-                    with engine.begin() as conn:
-                        for _, row in df_novo.iterrows():
-                            result = conn.execute(text("""
-                                SELECT 1 FROM sku
-                                WHERE sku = :sku
-                                  AND TRIM(level1) = :level1
-                                  AND TRIM(level2) = :level2
-                                  AND ROUND(custo_unitario::numeric, 2) = ROUND(:custo_unitario::numeric, 2)
-                                  AND quantity = :quantity
-                                LIMIT 1
-                            """), row.to_dict()).fetchone()
+                with engine.begin() as conn:
+                    for _, row in df_novo.iterrows():
+                        row_dict = row.to_dict()
 
-                            if result is None:
-                                conn.execute(text("""
-                                    INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
-                                    VALUES (:sku, :level1, :level2, :custo_unitario, :quantity, NOW())
-                                """), row.to_dict())
+                        # Verifica se já existe uma linha exatamente igual
+                        result = conn.execute(text("""
+                            SELECT 1 FROM sku
+                            WHERE sku = :sku
+                              AND TRIM(level1) = :level1
+                              AND TRIM(level2) = :level2
+                              AND ROUND(CAST(custo_unitario AS numeric), 2) = ROUND(CAST(:custo_unitario AS numeric), 2)
+                              AND quantity = :quantity
+                            LIMIT 1
+                        """), row_dict).fetchone()
 
-                    st.success("✅ Planilha importada com sucesso!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Erro ao processar: {e}")
+                        # Insere nova linha SOMENTE se não existir igual
+                        if result is None:
+                            conn.execute(text("""
+                                INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
+                                VALUES (:sku, :level1, :level2, :custo_unitario, :quantity, NOW())
+                            """), row_dict)
+
+                st.success("✅ Planilha importada com sucesso!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Erro ao processar: {e}")
 
     # 6️⃣ Planilha de relação SKU ↔ MLB
     st.markdown("---")
