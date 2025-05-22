@@ -536,7 +536,8 @@ def mostrar_dashboard():
 
     
     # ✅ extrai a data local também para agrupar corretamente
-    df["data_local"] = df["date_closed"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.date
+    df["data_local"] = df["date_closed"].dt.tz_convert("America/Sao_Paulo").dt.date
+
     
     # agrupa e calcula média
     gb = df.groupby(["dia", "data_local"])["total_amount"].sum().reset_index()
