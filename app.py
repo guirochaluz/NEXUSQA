@@ -249,7 +249,8 @@ def render_sidebar():
                 "Gestão de SKU",
                 "Gestão de Despesas",
                 "Painel de Metas",
-                "Gestão de Anúncios"
+                "Gestão de Anúncios",
+                "Configurações"  # 🔧 Nova tela adicionada
             ],
             icons=[
                 "house",
@@ -259,7 +260,8 @@ def render_sidebar():
                 "box-seam",
                 "currency-dollar",
                 "bar-chart-line",
-                "bullseye"
+                "bullseye",
+                "gear"  # ícone para Configurações
             ],
             menu_icon="list",
             default_index=[
@@ -270,7 +272,8 @@ def render_sidebar():
                 "Gestão de SKU",
                 "Gestão de Despesas",
                 "Painel de Metas",
-                "Gestão de Anúncios"
+                "Gestão de Anúncios",
+                "Configurações"
             ].index(st.session_state.get("page", "Dashboard")),
             orientation="vertical",
             styles={
@@ -279,21 +282,21 @@ def render_sidebar():
                     "background-color": "#161b22"
                 },
                 "icon": {
-                    "color": "#2ecc71",      # ícones em verde
+                    "color": "#2ecc71",
                     "font-size": "18px"
                 },
                 "nav-link": {
                     "font-size": "16px",
                     "text-align": "left",
                     "margin": "4px 0",
-                    "color": "#fff",          # texto branco
+                    "color": "#fff",
                     "background-color": "transparent"
                 },
                 "nav-link:hover": {
-                    "background-color": "#27ae60"  # hover verde escuro
+                    "background-color": "#27ae60"
                 },
                 "nav-link-selected": {
-                    "background-color": "#2ecc71", # seleção em verde claro
+                    "background-color": "#2ecc71",
                     "color": "white"
                 },
             },
@@ -1050,7 +1053,53 @@ def mostrar_gestao_sku():
     except Exception as e:
         st.error(f"❌ Erro ao carregar relações: {e}")
 
-            
+def mostrar_configuracoes():
+    st.header("⚙️ Configurações e Diagnóstico de Dados")
+
+    # 1️⃣ Métricas principais
+    with engine.begin() as conn:
+        encontrados = conn.execute(text("""
+            SELECT COUNT(*) FROM sales
+            WHERE item_id IN (SELECT mlb FROM skumlb)
+        """)).scalar()
+
+        sem_preco = conn.execute(text("""
+            SELECT COUNT(*) FROM sales
+            WHERE sku IS NOT NULL AND custo_unitario IS NULL
+        """)).scalar()
+
+    col1, col2 = st.columns(2)
+    col1.metric("🟢 Vendas com SKU vinculado", encontrados)
+    col2.metric("🔴 SKUs sem preço cadastrado", sem_preco)
+
+    st.markdown("---")
+    st.markdown("### 📋 Diagnóstico de Inconsistências nos SKUs")
+
+    # 2️⃣ Consulta da base com possíveis inconsistências
+    df = pd.read_sql(text("""
+        SELECT item_id, sku, level1, level2, custo_unitario
+        FROM sales
+        ORDER BY date_closed DESC
+    """), engine)
+
+    # 3️⃣ Filtros de inconsistência
+    col1, col2, col3, col4 = st.columns(4)
+    filtrar_sku_nulo = col1.checkbox("SKU nulo", value=True)
+    filtrar_level1_nulo = col2.checkbox("Level1 nulo", value=True)
+    filtrar_level2_nulo = col3.checkbox("Level2 nulo", value=True)
+    filtrar_preco_nulo = col4.checkbox("Preço Unitário nulo", value=True)
+
+    if filtrar_sku_nulo:
+        df = df[df["sku"].isna()]
+    if filtrar_level1_nulo:
+        df = df[df["level1"].isna()]
+    if filtrar_level2_nulo:
+        df = df[df["level2"].isna()]
+    if filtrar_preco_nulo:
+        df = df[df["custo_unitario"].isna()]
+
+    st.dataframe(df, use_container_width=True)
+
     
 # Funções para cada página
 def mostrar_expedicao_logistica():
@@ -1087,3 +1136,5 @@ elif pagina == "Painel de Metas":
     mostrar_painel_metas()
 elif pagina == "Gestão de Anúncios":
     mostrar_anuncios()
+elif pagina == "Configurações":
+    mostrar_configuracoes()
