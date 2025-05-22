@@ -44,6 +44,7 @@ import altair as alt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
+import io
 
 
 # 4) Configuração de locale
@@ -910,8 +911,20 @@ def mostrar_gestao_sku():
 
     # 4. Exportar modelo Excel com as colunas
     modelo = pd.DataFrame(columns=["nickname", "sku", "level1", "level2", "custo_unitario", "quantity"])
-    modelo_bytes = modelo.to_excel(index=False, engine="openpyxl")
-    st.download_button("⬇️ Baixar Modelo Excel", modelo_bytes, "modelo_sku.xlsx")
+    
+    # Escreve o DataFrame em um buffer de memória
+    import io
+    output = io.BytesIO()
+    modelo.to_excel(output, index=False, engine="openpyxl")
+    modelo_bytes = output.getvalue()
+    
+    # Botão para download
+    st.download_button(
+        label="⬇️ Baixar Modelo Excel",
+        data=modelo_bytes,
+        file_name="modelo_sku.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
     # 5. Upload de planilha para inserir/atualizar
     st.markdown("### ⬆️ Importar Planilha para Atualizar Base de SKUs")
@@ -944,6 +957,51 @@ def mostrar_gestao_sku():
 
         except Exception as e:
             st.error(f"❌ Erro ao processar o arquivo: {e}")
+        st.markdown("---")
+    st.markdown("### ➕ Adicionar Novo SKU Manualmente")
+
+    with st.expander("📋 Novo SKU"):
+        with st.form("form_novo_sku"):
+            col1, col2 = st.columns(2)
+            nickname = col1.text_input("Nickname da Conta")
+            sku = col2.text_input("Código do SKU")
+
+            level1 = col1.text_input("Level 1 (Categoria Principal)")
+            level2 = col2.text_input("Level 2 (Subcategoria)")
+
+            col3, col4 = st.columns(2)
+            custo_unitario = col3.number_input("Custo Unitário (R$)", min_value=0.0, step=0.01, format="%.2f")
+            quantity = col4.number_input("Quantidade em Estoque", min_value=0, step=1)
+
+            submitted = st.form_submit_button("✅ Cadastrar")
+
+            if submitted:
+                if not nickname or not sku:
+                    st.warning("⚠️ Preencha pelo menos o nickname e o código do SKU.")
+                else:
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(text("""
+                                INSERT INTO sku (nickname, sku, level1, level2, custo_unitario, quantity)
+                                VALUES (:nickname, :sku, :level1, :level2, :custo_unitario, :quantity)
+                                ON CONFLICT (nickname, sku)
+                                DO UPDATE SET
+                                    level1 = EXCLUDED.level1,
+                                    level2 = EXCLUDED.level2,
+                                    custo_unitario = EXCLUDED.custo_unitario,
+                                    quantity = EXCLUDED.quantity
+                            """), {
+                                "nickname": nickname,
+                                "sku": sku,
+                                "level1": level1,
+                                "level2": level2,
+                                "custo_unitario": custo_unitario,
+                                "quantity": quantity
+                            })
+                        st.success("✅ SKU cadastrado com sucesso!")
+                        st.experimental_rerun()
+                    except Exception as e:
+                        st.error(f"❌ Erro ao cadastrar: {e}")
             
     
 # Funções para cada página
