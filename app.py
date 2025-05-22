@@ -546,28 +546,58 @@ def mostrar_dashboard():
     # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
     st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
     
-    # Extrai hora e calcula média acumulada
+    # Extrai hora da venda
     df["hora"] = df["date_adjusted"].dt.hour
-    faturamento_por_hora = (
+    
+    # 1️⃣ Calcula média por hora do dia, depois acumula
+    media_por_hora = (
         df.groupby("hora")["total_amount"]
           .mean()
           .cumsum()
           .reset_index(name="Valor Médio Acumulado")
     )
     
-    # Plota
+    # 2️⃣ Agora calcula o ponto final: média do faturamento diário até a hora atual
+    hora_atual = pd.Timestamp.now().hour
+    
+    # Filtra somente as vendas até a hora atual de cada dia
+    df["data"] = df["date_adjusted"].dt.date
+    df["hora"] = df["date_adjusted"].dt.hour
+    df_ate_agora = df[df["hora"] <= hora_atual]
+    
+    # Soma total de cada dia (até a hora atual)
+    faturamento_dia_ate_hora = df_ate_agora.groupby("data")["total_amount"].sum()
+    
+    # Calcula a média entre os dias
+    media_final = faturamento_dia_ate_hora.mean()
+    
+    # Adiciona o ponto extra ao gráfico com a hora atual e a média acumulada até ela
+    media_por_hora = pd.concat([
+        media_por_hora,
+        pd.DataFrame([{
+            "hora": hora_atual,
+            "Valor Médio Acumulado": media_final
+        }])
+    ], ignore_index=True)
+    
+    # Garante que não fique duplicado
+    media_por_hora = media_por_hora.groupby("hora").last().reset_index()
+    
+    # Plota o gráfico
     fig_hora = px.line(
-        faturamento_por_hora,
+        media_por_hora,
         x="hora",
         y="Valor Médio Acumulado",
-        title="⏰ Média de Faturamento Acumulado por Hora",
+        title="⏰ Faturamento Acumulado por Hora (Média por Dia no Período)",
         labels={
             "hora": "Hora do Dia",
-            "Valor Médio Acumulado": "Valor Médio Acumulado"
+            "Valor Médio Acumulado": "Média Acumulada (R$)"
         },
         color_discrete_sequence=["#27ae60"],
         markers=True
     )
+    fig_hora.update_layout(xaxis=dict(dtick=1))
+    
     st.plotly_chart(fig_hora, use_container_width=True)
 
 
