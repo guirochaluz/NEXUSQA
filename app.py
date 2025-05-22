@@ -510,26 +510,36 @@ def mostrar_dashboard():
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
     
+    # Nome dos dias na ordem certa
     dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     
-    # ✅ converte apenas para este gráfico
-    df["dia"] = df["date_adjusted"].dt.day_name().map({
-        "Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
-        "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"
+    # Extrai dia da semana em português
+    df["dia_semana"] = df["date_adjusted"].dt.day_name().map({
+        "Monday": "Segunda", "Tuesday": "Terça", "Wednesday": "Quarta",
+        "Thursday": "Quinta", "Friday": "Sexta", "Saturday": "Sábado", "Sunday": "Domingo"
     })
-
     
-    # agrupa e calcula média
-    gb = df.groupby(["dia", "date_adjusted"])["total_amount"].sum().reset_index()
-    ab = gb.groupby("dia")["total_amount"].mean().reindex(dias).reset_index()
+    # Extrai a data (sem hora)
+    df["data"] = df["date_adjusted"].dt.date
     
+    # Soma o total vendido por dia (independente da hora)
+    total_por_data = df.groupby(["dia_semana", "data"])["total_amount"].sum().reset_index()
+    
+    # Agora calcula a média por dia da semana
+    media_por_dia = total_por_data.groupby("dia_semana")["total_amount"].mean().reindex(dias).reset_index()
+    
+    # Plota o gráfico de barras
     fig_bar = px.bar(
-        ab, x="dia", y="total_amount", text_auto=".2s",
-        labels={"dia": "Dia", "total_amount": "Média"},
+        media_por_dia,
+        x="dia_semana",
+        y="total_amount",
+        text_auto=".2s",
+        labels={"dia_semana": "Dia da Semana", "total_amount": "Média Vendida (R$)"},
         color_discrete_sequence=["#27ae60"]
     )
     
     st.plotly_chart(fig_bar, use_container_width=True, theme="streamlit")
+
 
 
 
