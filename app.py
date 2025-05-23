@@ -1061,10 +1061,8 @@ def mostrar_configuracoes():
     st.markdown("### 🛠️ Reprocessar Histórico de Vendas")
 
     # 1️⃣ Carrega contas disponíveis
-    contas = []
     with engine.connect() as conn:
-        result = conn.execute(text("SELECT ml_user_id, nickname, access_token FROM user_tokens ORDER BY nickname"))
-        contas = result.fetchall()
+        contas = conn.execute(text("SELECT ml_user_id, nickname, access_token FROM user_tokens ORDER BY nickname")).fetchall()
 
     if not contas:
         st.warning("Nenhuma conta cadastrada.")
@@ -1080,12 +1078,28 @@ def mostrar_configuracoes():
                 st.write("Clique no botão ao lado para revisar todo o histórico de vendas.")
             with col2:
                 if st.button(f"🔄 Reprocessar Histórico Completo", key=f"btn_{ml_user_id}"):
-                    with st.spinner("🔁 Processando histórico..."):
-                        novas = get_full_sales(str(ml_user_id), access_token)
-                        atualizadas = revisar_status_historico(str(ml_user_id), access_token)
+                    progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
 
-                    st.success(f"✅ Importadas {novas} vendas novas.")
-                    st.info(f"♻️ Atualizadas {atualizadas} vendas com status modificados.")
+                    with st.spinner("🔄 Importando vendas novas..."):
+                        novas = get_full_sales(str(ml_user_id), access_token)
+                        progresso.progress(50, text="✅ Vendas novas importadas...")
+
+                    with st.spinner("♻️ Verificando alterações de status..."):
+                        atualizadas, alteracoes = revisar_status_historico(str(ml_user_id), access_token, return_changes=True)
+                        progresso.progress(100, text="✅ Reprocessamento concluído!")
+
+                    st.success(f"✅ {novas} vendas novas importadas.")
+                    st.info(f"♻️ {atualizadas} vendas com status alterados.")
+
+                    if alteracoes:
+                        df_alt = pd.DataFrame(alteracoes, columns=["order_id", "status_antigo", "status_novo"])
+                        csv = df_alt.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            label="⬇️ Exportar Alterações de Status",
+                            data=csv,
+                            file_name=f"status_alterados_{nickname}.csv",
+                            mime="text/csv"
+                        )
 
 def mostrar_expedicao_logistica():
     st.header("🚚 Expedição e Logística")
