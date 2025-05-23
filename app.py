@@ -171,7 +171,6 @@ def salvar_tokens_no_banco(data: dict):
 @st.cache_data(ttl=300)
 def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
     if conta_id:
-        # … seu código de consulta por nickname …
         sql = text("""
             SELECT s.order_id,
                    s.date_adjusted,
@@ -183,9 +182,11 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.total_amount,
                    s.ml_user_id,
                    s.buyer_nickname,
-                   u.nickname
+                   u.nickname,
+                   k.sku
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
+              LEFT JOIN sku k ON s.item_id = k.item_id
              WHERE s.ml_user_id = :uid
         """)
         df = pd.read_sql(sql, engine, params={"uid": ml_user_id})
@@ -202,12 +203,14 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.total_amount,
                    s.ml_user_id,
                    s.buyer_nickname,
-                   u.nickname
+                   u.nickname,
+                   k.sku
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
+              LEFT JOIN sku k ON s.item_id = k.item_id
         """)
-        # **ADICIONE esta linha abaixo**
         df = pd.read_sql(sql, engine)
+
     return df
 
 
