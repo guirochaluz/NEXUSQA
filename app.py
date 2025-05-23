@@ -1082,10 +1082,17 @@ def mostrar_configuracoes():
             WHERE sku IS NOT NULL AND custo_unitario IS NULL
         """)).scalar()
 
+        mlb_com_sku = conn.execute(text("SELECT COUNT(DISTINCT item_id) FROM sales WHERE sku IS NOT NULL")).scalar()
+        mlb_sem_sku = conn.execute(text("SELECT COUNT(DISTINCT item_id) FROM sales WHERE sku IS NULL")).scalar()
+
     col1, col2, col3 = st.columns(3)
     col1.metric("🔗 Vendas com SKU", total_com_sku)
     col2.metric("🚫 Vendas sem SKU", total_sem_sku)
     col3.metric("❌ SKUs sem Preço", total_sem_preco)
+
+    col4, col5 = st.columns(2)
+    col4.metric("📦 MLBs com SKU", mlb_com_sku)
+    col5.metric("📦 MLBs sem SKU", mlb_sem_sku)
 
     st.markdown("---")
     st.markdown("### 🔍 Filtros de Diagnóstico")
