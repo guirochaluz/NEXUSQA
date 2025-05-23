@@ -4,7 +4,7 @@ from dateutil import parser
 from db import SessionLocal
 from models import Sale
 from sqlalchemy import func, text
-from typing import Optional
+from typing import Optional, Tuple, List
 from dotenv import load_dotenv
 from dateutil import parser
 from dateutil.tz import tzutc
