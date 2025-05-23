@@ -822,7 +822,7 @@ def mostrar_anuncios():
 def mostrar_relatorios():
     st.header("📋 Relatórios de Vendas")
 
-    # --- carrega vendas e nickname das contas ---
+    # --- carrega vendas e contas ---
     df = carregar_vendas()
     contas_df = pd.read_sql(text("SELECT ml_user_id, nickname FROM user_tokens"), engine)
 
@@ -830,11 +830,23 @@ def mostrar_relatorios():
         st.warning("Nenhum dado encontrado.")
         return
 
-    # --- converte datas e junta com apelidos das contas ---
-    df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
-    df = df.merge(contas_df, on='ml_user_id', how='left')  # join usando ml_user_id
+    # --- normaliza tipo para garantir merge correto ---
+    df['ml_user_id'] = df['ml_user_id'].astype(str)
+    contas_df['ml_user_id'] = contas_df['ml_user_id'].astype(str)
 
-    # --- filtros de período e conta ---
+    # --- junta apelido das contas ---
+    df = df.merge(contas_df, on='ml_user_id', how='left')
+
+    # --- valida se nickname veio corretamente ---
+    if 'nickname' not in df.columns:
+        st.error("Erro: coluna 'nickname' não encontrada após o merge.")
+        st.write("Colunas disponíveis:", df.columns.tolist())
+        return
+
+    # --- converte datas ---
+    df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
+
+    # --- filtros ---
     col1, col2, col3 = st.columns([1.3, 1.3, 2])
     with col1:
         data_ini = st.date_input("De:", value=df['date_adjusted'].min().date())
@@ -855,12 +867,12 @@ def mostrar_relatorios():
         st.warning("Nenhuma venda no período/conta selecionado.")
         return
 
-    # --- adiciona link do anúncio ---
+    # --- link para o anúncio ---
     df_filt['link'] = df_filt['item_id'].apply(
         lambda x: f"[🔗 Ver Anúncio](https://www.mercadolivre.com.br/anuncio/{x})"
     )
 
-    # --- define colunas a exibir ---
+    # --- colunas a exibir ---
     colunas = [
         'date_adjusted',
         'item_id',
@@ -878,7 +890,7 @@ def mostrar_relatorios():
     ]
     df_exibir = df_filt[colunas].copy()
 
-    # --- formata campos de valor ---
+    # --- formatação de valores ---
     df_exibir['unit_price'] = df_exibir['unit_price'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
@@ -886,10 +898,9 @@ def mostrar_relatorios():
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
 
-    # --- exibe tabela no app ---
+    # --- exibe a tabela e exporta ---
     st.dataframe(df_exibir, use_container_width=True)
 
-    # --- exportação em CSV com dados crus (não formatados) ---
     csv = df_filt[colunas].to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Exportar CSV das Vendas",
