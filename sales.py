@@ -146,12 +146,20 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
         if not orders:
             return 0
 
-        # 4) Persiste novas vendas
+        # 4) Persiste ou atualiza vendas
         for o in orders:
             oid = str(o["id"])
-            if not db.query(Sale).filter_by(order_id=oid).first():
+            existing_sale = db.query(Sale).filter_by(order_id=oid).first()
+        
+            if not existing_sale:
+                # nova venda
                 db.add(_order_to_sale(o, ml_user_id))
                 total_saved += 1
+            else:
+                # venda já existe — atualiza o status se mudou
+                novo_status = o.get("status", "").lower()
+                if novo_status and existing_sale.status != novo_status:
+                    existing_sale.status = novo_status
 
         db.commit()
 
@@ -182,9 +190,16 @@ def sync_all_accounts() -> int:
     return total
 
 
-def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
-    from db import SessionLocal
-    db = SessionLocal()
+def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = None) -> Sale:
+    """
+    Transforma um dicionário de pedido do Mercado Livre em um objeto Sale.
+    Se um objeto db (Session) não for passado, cria e fecha uma sessão local.
+    """
+    internal_session = False
+    if db is None:
+        from db import SessionLocal
+        db = SessionLocal()
+        internal_session = True
 
     buyer    = order.get("buyer", {}) or {}
     item     = (order.get("order_items") or [{}])[0]
@@ -216,8 +231,10 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
 
             if sku_info:
                 quantity_sku, custo_unitario, level1, level2 = sku_info
+
     finally:
-        db.close()
+        if internal_session:
+            db.close()
 
     return Sale(
         order_id         = str(order["id"]),
@@ -249,3 +266,54 @@ def _order_to_sale(order: dict, ml_user_id: str) -> Sale:
         level1           = level1,
         level2           = level2
     )
+
+def revisar_status_historico(ml_user_id: str, access_token: str) -> int:
+    """
+    Revarre todas as vendas da conta no Mercado Livre e atualiza os status na base local.
+    Retorna o total de vendas que tiveram o status alterado.
+    """
+    db = SessionLocal()
+    atualizadas = 0
+
+    try:
+        offset = 0
+        headers = {"Authorization": f"Bearer {access_token}"}
+        params_base = {
+            "seller": ml_user_id,
+            "order.status": "paid",
+            "sort": "date_desc",
+            "limit": FULL_PAGE_SIZE,
+        }
+
+        while True:
+            params = params_base.copy()
+            params["offset"] = offset
+
+            resp = requests.get(API_BASE, headers=headers, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            orders = data.get("results", [])
+
+            if not orders:
+                break
+
+            for o in orders:
+                oid = str(o["id"])
+                novo_status = o.get("status", "").lower()
+
+                existing_sale = db.query(Sale).filter_by(order_id=oid).first()
+                if existing_sale and novo_status and existing_sale.status != novo_status:
+                    existing_sale.status = novo_status
+                    atualizadas += 1
+
+            db.commit()
+            offset += FULL_PAGE_SIZE
+
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Erro ao revisar histórico: {e}")
+
+    finally:
+        db.close()
+
+    return atualizadas
