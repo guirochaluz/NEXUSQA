@@ -1057,10 +1057,9 @@ def mostrar_gestao_sku():
     
 def mostrar_configuracoes():
     st.header("⚙️ Configurações e Diagnóstico")
-
     st.markdown("### 🛠️ Reprocessar Histórico de Vendas")
 
-    # 1️⃣ Carrega contas disponíveis
+    # Carrega contas disponíveis
     with engine.connect() as conn:
         contas = conn.execute(text("SELECT ml_user_id, nickname, access_token FROM user_tokens ORDER BY nickname")).fetchall()
 
@@ -1068,32 +1067,45 @@ def mostrar_configuracoes():
         st.warning("Nenhuma conta cadastrada.")
         return
 
+    # Botão para rodar todas as contas de uma vez
+    if st.button("🚀 Reprocessar Todas as Contas", use_container_width=True):
+        with st.spinner("🔄 Executando para todas as contas..."):
+            for i, row in enumerate(contas):
+                ml_user_id, nickname, access_token = row
+                st.subheader(f"🔗 Conta: {nickname}")
+
+                novas = get_full_sales(str(ml_user_id), access_token)
+                atualizadas, _ = revisar_status_historico(str(ml_user_id), access_token, return_changes=False)
+
+                st.success(f"✅ {novas} novas vendas importadas")
+                st.info(f"♻️ {atualizadas} vendas com status alterados")
+
+    # Por conta individual
     for row in contas:
         ml_user_id, nickname, access_token = row
 
         with st.expander(f"🔗 Conta: {nickname}", expanded=False):
-            col1, col2 = st.columns([3, 2])
-            with col1:
-                st.write(f"**User ID:** `{ml_user_id}`")
-                st.write("Clique no botão ao lado para revisar todo o histórico de vendas.")
-            with col2:
-                if st.button(f"🔄 Reprocessar Histórico Completo", key=f"btn_{ml_user_id}"):
-                    progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
+            col1, col2, col3 = st.columns([2, 2, 3])
 
+            with col1:
+                if st.button("🆕 Vendas Recentes", key=f"recentes_{ml_user_id}"):
+                    progresso = st.progress(0, text="🔁 Buscando novas vendas...")
                     with st.spinner("🔄 Importando vendas novas..."):
                         novas = get_full_sales(str(ml_user_id), access_token)
-                        progresso.progress(50, text="✅ Vendas novas importadas...")
+                        progresso.progress(100, text="✅ Novas vendas importadas")
+                        st.success(f"✅ {novas} novas vendas importadas.")
+                        st.cache_data.clear()
+                    progresso.empty()
 
+            with col2:
+                if st.button("📜 Histórico Completo", key=f"historico_{ml_user_id}"):
+                    progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
                     with st.spinner("♻️ Verificando alterações de status..."):
                         atualizadas, alteracoes = revisar_status_historico(str(ml_user_id), access_token, return_changes=True)
                         progresso.progress(100, text="✅ Reprocessamento concluído!")
-
-                    # limpa cache caso esteja usando cache_data
-                    st.cache_data.clear()
-
+                        st.info(f"♻️ {atualizadas} vendas com status alterados.")
+                        st.cache_data.clear()
                     progresso.empty()
-                    st.success(f"✅ {novas} vendas novas importadas.")
-                    st.info(f"♻️ {atualizadas} vendas com status alterados.")
 
                     if alteracoes:
                         df_alt = pd.DataFrame(alteracoes, columns=["order_id", "status_antigo", "status_novo"])
@@ -1105,6 +1117,9 @@ def mostrar_configuracoes():
                             mime="text/csv",
                             use_container_width=True
                         )
+
+            with col3:
+                st.write(f"**User ID:** `{ml_user_id}`")
 
 def mostrar_expedicao_logistica():
     st.header("🚚 Expedição e Logística")
