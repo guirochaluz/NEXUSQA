@@ -1043,7 +1043,7 @@ def mostrar_gestao_sku():
 
     
 # Funções para cada página
-def def mostrar_configuracoes():
+def mostrar_configuracoes():
     st.header("Configurações")
     st.info("Em breve...")
 
