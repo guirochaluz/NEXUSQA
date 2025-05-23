@@ -31,6 +31,7 @@ st.set_page_config(
 )
 
 # 3) Depois de set_page_config, importe tudo o mais que precisar
+from sales import sync_all_accounts, get_full_sales, revisar_status_historico
 from streamlit_cookies_manager import EncryptedCookieManager
 import pandas as pd
 import plotly.express as px
@@ -38,7 +39,6 @@ import requests
 from sqlalchemy import create_engine, text
 from streamlit_option_menu import option_menu
 from typing import Optional
-from sales import sync_all_accounts
 from wordcloud import WordCloud
 import altair as alt
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -1055,10 +1055,37 @@ def mostrar_gestao_sku():
                     st.error(f"❌ Erro ao importar ou conciliar dados: {e}")
 
     
-# Funções para cada página
 def mostrar_configuracoes():
-    st.header("Configurações")
-    st.info("Em breve...")
+    st.header("⚙️ Configurações e Diagnóstico")
+
+    st.markdown("### 🛠️ Reprocessar Histórico de Vendas")
+
+    # 1️⃣ Carrega contas disponíveis
+    contas = []
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT ml_user_id, nickname, access_token FROM user_tokens ORDER BY nickname"))
+        contas = result.fetchall()
+
+    if not contas:
+        st.warning("Nenhuma conta cadastrada.")
+        return
+
+    for row in contas:
+        ml_user_id, nickname, access_token = row
+
+        with st.expander(f"🔗 Conta: {nickname}", expanded=False):
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.write(f"**User ID:** `{ml_user_id}`")
+                st.write("Clique no botão ao lado para revisar todo o histórico de vendas.")
+            with col2:
+                if st.button(f"🔄 Reprocessar Histórico Completo", key=f"btn_{ml_user_id}"):
+                    with st.spinner("🔁 Processando histórico..."):
+                        novas = get_full_sales(str(ml_user_id), access_token)
+                        atualizadas = revisar_status_historico(str(ml_user_id), access_token)
+
+                    st.success(f"✅ Importadas {novas} vendas novas.")
+                    st.info(f"♻️ Atualizadas {atualizadas} vendas com status modificados.")
 
 def mostrar_expedicao_logistica():
     st.header("🚚 Expedição e Logística")
