@@ -277,12 +277,20 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     atualizadas = 0
     alteracoes = []
 
+    # Mapeia status da API para nomes usados localmente
+    tradutor_status = {
+        "paid": "Pago",
+        "cancelled": "Cancelado",
+        "payment_required": "Pagamento Pendente",
+        "payment_in_process": "Pagamento em Processamento",
+        "partially_paid": "Parcialmente Pago",
+    }
+
     try:
         offset = 0
         headers = {"Authorization": f"Bearer {access_token}"}
         params_base = {
             "seller": ml_user_id,
-            "order.status": "paid",
             "sort": "date_desc",
             "limit": FULL_PAGE_SIZE,
         }
@@ -300,14 +308,18 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
 
             for o in orders:
                 oid = str(o["id"])
-                novo_status = o.get("status", "").lower()
+                status_api_raw = o.get("status", "").strip().lower()
+                status_api_formatado = tradutor_status.get(status_api_raw, status_api_raw.capitalize())
 
                 existing_sale = db.query(Sale).filter_by(order_id=oid).first()
-                if existing_sale and novo_status and existing_sale.status != novo_status:
-                    if return_changes:
-                        alteracoes.append((oid, existing_sale.status, novo_status))
-                    existing_sale.status = novo_status
-                    atualizadas += 1
+                if existing_sale:
+                    status_local = existing_sale.status.strip().capitalize() if existing_sale.status else ""
+
+                    if status_local != status_api_formatado:
+                        if return_changes:
+                            alteracoes.append((oid, status_local, status_api_formatado))
+                        existing_sale.status = status_api_formatado
+                        atualizadas += 1
 
             db.commit()
             offset += FULL_PAGE_SIZE
