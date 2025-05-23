@@ -332,7 +332,7 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- CSS para inputs mais compactos ---
+    # --- CSS para compactar inputs ---
     st.markdown(
         """
         <style>
@@ -340,25 +340,26 @@ def mostrar_dashboard():
             padding-top: 0.1rem;
             padding-bottom: 0.1rem;
         }
+        .stMultiSelect {
+            max-height: 40px;
+            overflow-y: auto;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # --- filtro discreto de Contas no topo ---
-    contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
-    contas_lst = contas_df["nickname"].astype(str).tolist()
-    selecionadas = st.multiselect(
-        "🔹 Contas (opcional)",
-        options=contas_lst,
-        default=contas_lst,
-        key="contas_ms",
-        help="Filtre por uma ou mais contas; deixe todas selecionadas para não filtrar."
-    )
-    if selecionadas:
-        df_full = df_full[df_full["nickname"].isin(selecionadas)]
+    # --- Expander de contas ---
+    with st.expander("Contas (opcional)", expanded=False):
+        contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
+        contas_lst = contas_df["nickname"].astype(str).tolist()
+        selecionadas = st.multiselect(
+            "", options=contas_lst, default=contas_lst, key="contas_ms"
+        )
+        if selecionadas:
+            df_full = df_full[df_full["nickname"].isin(selecionadas)]
 
-    # --- linha única de filtros: Quick-Filter | De | Até ---
+    # --- linha única de filtros: Filtro Rápido | De | Até ---
     col1, col2, col3 = st.columns([2, 1.3, 1.3])
 
     with col1:
@@ -370,7 +371,8 @@ def mostrar_dashboard():
                 "Ontem",
                 "Últimos 7 Dias",
                 "Este Mês",
-                "Últimos 30 Dias"
+                "Últimos 30 Dias",
+                "Este Ano"
             ],
             index=1,
             key="filtro_quick",
@@ -387,14 +389,17 @@ def mostrar_dashboard():
         de = ate = hoje - pd.Timedelta(days=1)
     elif filtro_rapido == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
-    elif filtro_rapido == "Este Mês":
-        de, ate = hoje.replace(day=1), hoje
     elif filtro_rapido == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
+    elif filtro_rapido == "Este Mês":
+        de, ate = hoje.replace(day=1), hoje
+    elif filtro_rapido == "Este Ano":
+        de, ate = hoje.replace(month=1, day=1), hoje
     else:
         de, ate = data_min, data_max
 
     custom = (filtro_rapido == "Período Personalizado")
+
     with col2:
         de = st.date_input(
             "De", value=de,
