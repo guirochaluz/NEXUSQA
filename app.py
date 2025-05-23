@@ -1088,6 +1088,10 @@ def mostrar_configuracoes():
                         atualizadas, alteracoes = revisar_status_historico(str(ml_user_id), access_token, return_changes=True)
                         progresso.progress(100, text="✅ Reprocessamento concluído!")
 
+                    # limpa cache caso esteja usando cache_data
+                    st.cache_data.clear()
+
+                    progresso.empty()
                     st.success(f"✅ {novas} vendas novas importadas.")
                     st.info(f"♻️ {atualizadas} vendas com status alterados.")
 
@@ -1098,7 +1102,8 @@ def mostrar_configuracoes():
                             label="⬇️ Exportar Alterações de Status",
                             data=csv,
                             file_name=f"status_alterados_{nickname}.csv",
-                            mime="text/csv"
+                            mime="text/csv",
+                            use_container_width=True
                         )
 
 def mostrar_expedicao_logistica():
