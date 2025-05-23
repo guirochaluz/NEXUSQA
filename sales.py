@@ -267,13 +267,15 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         level2           = level2
     )
 
-def revisar_status_historico(ml_user_id: str, access_token: str) -> int:
+def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     """
     Revarre todas as vendas da conta no Mercado Livre e atualiza os status na base local.
-    Retorna o total de vendas que tiveram o status alterado.
+    Retorna o total de vendas que tiveram o status alterado e, se return_changes=True,
+    também retorna a lista de alterações (order_id, status_antigo, status_novo).
     """
     db = SessionLocal()
     atualizadas = 0
+    alteracoes = []
 
     try:
         offset = 0
@@ -291,8 +293,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str) -> int:
 
             resp = requests.get(API_BASE, headers=headers, params=params)
             resp.raise_for_status()
-            data = resp.json()
-            orders = data.get("results", [])
+            orders = resp.json().get("results", [])
 
             if not orders:
                 break
@@ -303,6 +304,8 @@ def revisar_status_historico(ml_user_id: str, access_token: str) -> int:
 
                 existing_sale = db.query(Sale).filter_by(order_id=oid).first()
                 if existing_sale and novo_status and existing_sale.status != novo_status:
+                    if return_changes:
+                        alteracoes.append((oid, existing_sale.status, novo_status))
                     existing_sale.status = novo_status
                     atualizadas += 1
 
@@ -316,4 +319,4 @@ def revisar_status_historico(ml_user_id: str, access_token: str) -> int:
     finally:
         db.close()
 
-    return atualizadas
+    return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
