@@ -277,7 +277,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     atualizadas = 0
     alteracoes = []
 
-    # Mapeia status da API para nomes usados localmente
+    # Tradução de status da API para padrão do sistema
     tradutor_status = {
         "paid": "Pago",
         "cancelled": "Cancelado",
@@ -285,6 +285,8 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
         "payment_in_process": "Pagamento em Processamento",
         "partially_paid": "Parcialmente Pago",
     }
+
+    MAX_OFFSET = 10000  # Limite imposto pela API
 
     try:
         offset = 0
@@ -295,7 +297,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
             "limit": FULL_PAGE_SIZE,
         }
 
-        while True:
+        while offset < MAX_OFFSET:
             params = params_base.copy()
             params["offset"] = offset
 
@@ -322,6 +324,10 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                         atualizadas += 1
 
             db.commit()
+
+            if len(orders) < FULL_PAGE_SIZE:
+                break
+
             offset += FULL_PAGE_SIZE
 
     except Exception as e:
