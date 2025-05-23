@@ -825,17 +825,17 @@ def mostrar_anuncios():
 def mostrar_relatorios():
     st.header("📋 Relatórios de Vendas")
 
-    # --- carrega vendas ---
+    # --- carrega vendas já com nickname e sku ---
     df = carregar_vendas()
 
     if df.empty:
         st.warning("Nenhum dado encontrado.")
         return
 
-    # --- garante datas em formato datetime ---
+    # --- garante tipo datetime ---
     df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
 
-    # --- filtros de período e conta ---
+    # --- filtros: período e contas ---
     col1, col2, col3 = st.columns([1.3, 1.3, 2])
     with col1:
         data_ini = st.date_input("De:", value=df['date_adjusted'].min().date())
@@ -856,12 +856,12 @@ def mostrar_relatorios():
         st.warning("Nenhuma venda no período/conta selecionado.")
         return
 
-    # --- link do anúncio ---
+    # --- link para o anúncio ---
     df_filt['link'] = df_filt['item_id'].apply(
         lambda x: f"[🔗 Ver Anúncio](https://www.mercadolivre.com.br/anuncio/{x})"
     )
 
-    # --- colunas principais ---
+    # --- colunas a exibir ---
     colunas = [
         'date_adjusted',
         'item_id',
@@ -877,9 +877,10 @@ def mostrar_relatorios():
         'status',
         'link'
     ]
+
     df_exibir = df_filt[colunas].copy()
 
-    # --- formata valores em reais ---
+    # --- formatação de valores em R$ ---
     df_exibir['unit_price'] = df_exibir['unit_price'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
@@ -890,7 +891,7 @@ def mostrar_relatorios():
     # --- exibe tabela ---
     st.dataframe(df_exibir, use_container_width=True)
 
-    # --- exportação em Excel (.xlsx) ---
+    # --- exporta Excel .xlsx ---
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_filt[colunas].to_excel(writer, index=False, sheet_name='Vendas')
