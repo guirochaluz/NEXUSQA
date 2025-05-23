@@ -702,16 +702,6 @@ def mostrar_contas_cadastradas():
                     except Exception as e:
                         st.error(f"❌ Erro ao conectar com o servidor: {e}")
 
-            # Botão: Vendas Recentes
-            with col2:
-                if st.button("🆕 Vendas Recentes", key=f"recentes_{ml_user_id}"):
-                    progresso = st.progress(0, text="🔁 Buscando novas vendas...")
-                    with st.spinner("🔄 Importando vendas novas..."):
-                        novas = get_full_sales(ml_user_id, access_token)
-                        progresso.progress(100, text="✅ Novas vendas importadas")
-                        st.success(f"✅ {novas} novas vendas importadas.")
-                        st.cache_data.clear()
-                    progresso.empty()
 
             # Botão: Histórico Completo
             with col3:
