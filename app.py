@@ -186,11 +186,10 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    k.sku
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
-              LEFT JOIN sku k ON s.item_id = k.item_id
+              LEFT JOIN skumlb k ON s.item_id = k.mlb
              WHERE s.ml_user_id = :uid
         """)
-        df = pd.read_sql(sql, engine, params={"uid": ml_user_id})
-
+        df = pd.read_sql(sql, engine, params={"uid": conta_id})
     else:
         sql = text("""
             SELECT s.order_id,
@@ -207,7 +206,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    k.sku
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
-              LEFT JOIN sku k ON s.item_id = k.item_id
+              LEFT JOIN skumlb k ON s.item_id = k.mlb
         """)
         df = pd.read_sql(sql, engine)
 
