@@ -822,31 +822,17 @@ def mostrar_anuncios():
 def mostrar_relatorios():
     st.header("📋 Relatórios de Vendas")
 
-    # --- carrega vendas e contas ---
+    # --- carrega vendas ---
     df = carregar_vendas()
-    contas_df = pd.read_sql(text("SELECT ml_user_id, nickname FROM user_tokens"), engine)
 
     if df.empty:
         st.warning("Nenhum dado encontrado.")
         return
 
-    # --- normaliza tipo para garantir merge correto ---
-    df['ml_user_id'] = df['ml_user_id'].astype(str)
-    contas_df['ml_user_id'] = contas_df['ml_user_id'].astype(str)
-
-    # --- junta apelido das contas ---
-    df = df.merge(contas_df, on='ml_user_id', how='left')
-
-    # --- valida se nickname veio corretamente ---
-    if 'nickname' not in df.columns:
-        st.error("Erro: coluna 'nickname' não encontrada após o merge.")
-        st.write("Colunas disponíveis:", df.columns.tolist())
-        return
-
-    # --- converte datas ---
+    # --- garante datas em formato datetime ---
     df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
 
-    # --- filtros ---
+    # --- filtros de período e conta ---
     col1, col2, col3 = st.columns([1.3, 1.3, 2])
     with col1:
         data_ini = st.date_input("De:", value=df['date_adjusted'].min().date())
@@ -867,12 +853,12 @@ def mostrar_relatorios():
         st.warning("Nenhuma venda no período/conta selecionado.")
         return
 
-    # --- link para o anúncio ---
+    # --- link do anúncio ---
     df_filt['link'] = df_filt['item_id'].apply(
         lambda x: f"[🔗 Ver Anúncio](https://www.mercadolivre.com.br/anuncio/{x})"
     )
 
-    # --- colunas a exibir ---
+    # --- colunas principais ---
     colunas = [
         'date_adjusted',
         'item_id',
@@ -890,7 +876,7 @@ def mostrar_relatorios():
     ]
     df_exibir = df_filt[colunas].copy()
 
-    # --- formatação de valores ---
+    # --- formata valores em reais ---
     df_exibir['unit_price'] = df_exibir['unit_price'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
@@ -898,15 +884,21 @@ def mostrar_relatorios():
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
 
-    # --- exibe a tabela e exporta ---
+    # --- exibe tabela ---
     st.dataframe(df_exibir, use_container_width=True)
 
-    csv = df_filt[colunas].to_csv(index=False).encode('utf-8')
+    # --- exportação em Excel (.xlsx) ---
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_filt[colunas].to_excel(writer, index=False, sheet_name='Vendas')
+        writer.save()
+        processed_data = output.getvalue()
+
     st.download_button(
-        label="⬇️ Exportar CSV das Vendas",
-        data=csv,
-        file_name="relatorio_vendas.csv",
-        mime="text/csv"
+        label="⬇️ Exportar Excel das Vendas",
+        data=processed_data,
+        file_name="relatorio_vendas.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 
