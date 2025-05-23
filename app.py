@@ -950,7 +950,14 @@ def mostrar_gestao_sku():
                          or filtro_txt in str(row["level1"]).lower()
                          or filtro_txt in str(row["level2"]).lower(), axis=1)]
 
-    # 4️⃣ Modelo Excel de SKU
+    # 4️⃣ Tabela logo após os filtros
+    st.markdown("### 📊 Tabela de Vendas com SKUs")
+    if df.empty:
+        st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
+    else:
+        st.dataframe(df, use_container_width=True)
+
+    # 5️⃣ Atualização da base SKU via planilha
     st.markdown("---")
     st.markdown("### 📥 Atualizar Base de SKUs via Planilha")
     modelo = pd.DataFrame(columns=["sku", "level1", "level2", "custo_unitario", "quantity"])
@@ -1000,7 +1007,7 @@ def mostrar_gestao_sku():
                 except Exception as e:
                     st.error(f"❌ Erro ao processar: {e}")
 
-    # 5️⃣ Planilha de relação SKU ↔ MLB
+    # 6️⃣ Relação SKU ↔ MLB
     st.markdown("---")
     st.markdown("### 🔄 Relação SKU com MLB")
     modelo_relacao = pd.DataFrame(columns=["sku", "mlb"])
