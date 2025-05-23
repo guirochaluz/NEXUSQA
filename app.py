@@ -1023,55 +1023,55 @@ def mostrar_gestao_sku():
                 except Exception as e:
                     st.error(f"❌ Erro ao processar: {e}")
 
-# 6️⃣ Planilha de relação SKU ↔ MLB
-st.markdown("---")
-st.markdown("### 🔄 Planilha de Relação SKU com MLB")
-
-# Botão para baixar modelo da relação SKU ↔ MLB
-modelo_relacao = pd.DataFrame(columns=["sku", "mlb"])
-buffer_rel = io.BytesIO()
-modelo_relacao.to_excel(buffer_rel, index=False, engine="openpyxl")
-st.download_button(
-    label="⬇️ Baixar Modelo Relação SKU ↔ MLB",
-    data=buffer_rel.getvalue(),
-    file_name="modelo_relacao_skumlb.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-# Upload da planilha preenchida
-arquivo_relacao = st.file_uploader("Selecione a planilha de relação (SKU + MLB)", type=["xlsx"], key="relacao_skumlb")
-
-if arquivo_relacao:
-    df_relacao = pd.read_excel(arquivo_relacao)
-    colunas_esperadas = {"sku", "mlb"}
-
-    if not colunas_esperadas.issubset(df_relacao.columns):
-        st.error("❌ A planilha precisa conter as colunas: sku e mlb.")
-    else:
-        if st.button("📥 Processar Planilha de SKU-MLB"):
-            try:
-                with engine.begin() as conn:
-                    # 1️⃣ Insere os novos pares na tabela skumlb
-                    for _, row in df_relacao.iterrows():
+    # 6️⃣ Planilha de relação SKU ↔ MLB
+    st.markdown("---")
+    st.markdown("### 🔄 Planilha de Relação SKU com MLB")
+    
+    # Botão para baixar modelo da relação SKU ↔ MLB
+    modelo_relacao = pd.DataFrame(columns=["sku", "mlb"])
+    buffer_rel = io.BytesIO()
+    modelo_relacao.to_excel(buffer_rel, index=False, engine="openpyxl")
+    st.download_button(
+        label="⬇️ Baixar Modelo Relação SKU ↔ MLB",
+        data=buffer_rel.getvalue(),
+        file_name="modelo_relacao_skumlb.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    
+    # Upload da planilha preenchida
+    arquivo_relacao = st.file_uploader("Selecione a planilha de relação (SKU + MLB)", type=["xlsx"], key="relacao_skumlb")
+    
+    if arquivo_relacao:
+        df_relacao = pd.read_excel(arquivo_relacao)
+        colunas_esperadas = {"sku", "mlb"}
+    
+        if not colunas_esperadas.issubset(df_relacao.columns):
+            st.error("❌ A planilha precisa conter as colunas: sku e mlb.")
+        else:
+            if st.button("📥 Processar Planilha de SKU-MLB"):
+                try:
+                    with engine.begin() as conn:
+                        # 1️⃣ Insere os novos pares na tabela skumlb
+                        for _, row in df_relacao.iterrows():
+                            conn.execute(text("""
+                                INSERT INTO skumlb (sku, mlb)
+                                VALUES (:sku, :mlb)
+                                ON CONFLICT (sku, mlb) DO NOTHING
+                            """), row.to_dict())
+    
+                        # 2️⃣ Atualiza a tabela sales com os novos SKUs onde ainda está NULL
                         conn.execute(text("""
-                            INSERT INTO skumlb (sku, mlb)
-                            VALUES (:sku, :mlb)
-                            ON CONFLICT (sku, mlb) DO NOTHING
-                        """), row.to_dict())
-
-                    # 2️⃣ Atualiza a tabela sales com os novos SKUs onde ainda está NULL
-                    conn.execute(text("""
-                        UPDATE sales
-                        SET sku = skumlb.sku
-                        FROM skumlb
-                        WHERE sales.item_id = skumlb.mlb
-                          AND sales.sku IS NULL
-                    """))
-
-                st.success("✅ Relações SKU-MLB importadas e conciliadas com sucesso!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Erro ao importar ou conciliar dados: {e}")
+                            UPDATE sales
+                            SET sku = skumlb.sku
+                            FROM skumlb
+                            WHERE sales.item_id = skumlb.mlb
+                              AND sales.sku IS NULL
+                        """))
+    
+                    st.success("✅ Relações SKU-MLB importadas e conciliadas com sucesso!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Erro ao importar ou conciliar dados: {e}")
 
 def mostrar_configuracoes():
     st.header("⚙️ Configurações e Diagnóstico de Dados")
