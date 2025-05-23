@@ -648,36 +648,92 @@ def mostrar_dashboard():
 
 def mostrar_contas_cadastradas():
     st.header("🏷️ Contas Cadastradas")
-    
+
     # Botão para Adicionar Nova Conta
     render_add_account_button()
 
     # Carregar as contas cadastradas
     df = pd.read_sql(text("SELECT ml_user_id, nickname, access_token, refresh_token FROM user_tokens ORDER BY nickname"), engine)
-    
+
     if df.empty:
         st.warning("Nenhuma conta cadastrada.")
         return
 
-    # Loop para criar expansores para cada conta
+    # Botão para processar todas as contas de uma vez
+    if st.button("🚀 Reprocessar Todas as Contas", use_container_width=True):
+        with st.spinner("🔄 Executando para todas as contas..."):
+            for row in df.itertuples(index=False):
+                ml_user_id = str(row.ml_user_id)
+                access_token = row.access_token
+                nickname = row.nickname
+
+                st.subheader(f"🔗 Conta: {nickname}")
+
+                novas = get_full_sales(ml_user_id, access_token)
+                atualizadas, _ = revisar_status_historico(ml_user_id, access_token, return_changes=False)
+
+                st.success(f"✅ {novas} novas vendas importadas")
+                st.info(f"♻️ {atualizadas} vendas com status alterados")
+
+    # Exibir uma seção para cada conta
     for row in df.itertuples(index=False):
         with st.expander(f"🔗 Conta ML: {row.nickname}"):
-            st.write(f"**User ID:** {row.ml_user_id}")
-            st.write(f"**Access Token:** `{row.access_token}`")
-            st.write(f"**Refresh Token:** `{row.refresh_token}`")
-            
-            # Botão para renovar o token
-            if st.button("🔄 Renovar Token", key=f"renew_{row.ml_user_id}"):
-                try:
-                    resp = requests.post(f"{BACKEND_URL}/auth/refresh", json={"user_id": row.ml_user_id})
-                    if resp.ok:
-                        data = resp.json()
-                        salvar_tokens_no_banco(data)
-                        st.success("✅ Token atualizado com sucesso!")
-                    else:
-                        st.error(f"❌ Erro ao atualizar o token: {resp.text}")
-                except Exception as e:
-                    st.error(f"❌ Erro ao conectar com o servidor: {e}")
+            ml_user_id = str(row.ml_user_id)
+            access_token = row.access_token
+            refresh_token = row.refresh_token
+
+            st.write(f"**User ID:** `{ml_user_id}`")
+            st.write(f"**Access Token:** `{access_token}`")
+            st.write(f"**Refresh Token:** `{refresh_token}`")
+
+            col1, col2, col3 = st.columns([2, 2, 3])
+
+            # Botão: Renovar Token
+            with col1:
+                if st.button("🔄 Renovar Token", key=f"renew_{ml_user_id}"):
+                    try:
+                        resp = requests.post(f"{BACKEND_URL}/auth/refresh", json={"user_id": ml_user_id})
+                        if resp.ok:
+                            data = resp.json()
+                            salvar_tokens_no_banco(data)
+                            st.success("✅ Token atualizado com sucesso!")
+                        else:
+                            st.error(f"❌ Erro ao atualizar o token: {resp.text}")
+                    except Exception as e:
+                        st.error(f"❌ Erro ao conectar com o servidor: {e}")
+
+            # Botão: Vendas Recentes
+            with col2:
+                if st.button("🆕 Vendas Recentes", key=f"recentes_{ml_user_id}"):
+                    progresso = st.progress(0, text="🔁 Buscando novas vendas...")
+                    with st.spinner("🔄 Importando vendas novas..."):
+                        novas = get_full_sales(ml_user_id, access_token)
+                        progresso.progress(100, text="✅ Novas vendas importadas")
+                        st.success(f"✅ {novas} novas vendas importadas.")
+                        st.cache_data.clear()
+                    progresso.empty()
+
+            # Botão: Histórico Completo
+            with col3:
+                if st.button("📜 Histórico Completo", key=f"historico_{ml_user_id}"):
+                    progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
+                    with st.spinner("♻️ Verificando alterações de status..."):
+                        atualizadas, alteracoes = revisar_status_historico(ml_user_id, access_token, return_changes=True)
+                        progresso.progress(100, text="✅ Reprocessamento concluído!")
+                        st.info(f"♻️ {atualizadas} vendas com status alterados.")
+                        st.cache_data.clear()
+                    progresso.empty()
+
+                    if alteracoes:
+                        df_alt = pd.DataFrame(alteracoes, columns=["order_id", "status_antigo", "status_novo"])
+                        csv = df_alt.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            label="⬇️ Exportar Alterações de Status",
+                            data=csv,
+                            file_name=f"status_alterados_{row.nickname}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
 
 def mostrar_anuncios():
     st.header("🎯 Análise de Anúncios")
@@ -1053,73 +1109,6 @@ def mostrar_gestao_sku():
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Erro ao importar ou conciliar dados: {e}")
-
-    
-def mostrar_configuracoes():
-    st.header("⚙️ Configurações e Diagnóstico")
-    st.markdown("### 🛠️ Reprocessar Histórico de Vendas")
-
-    # Carrega contas disponíveis
-    with engine.connect() as conn:
-        contas = conn.execute(text("SELECT ml_user_id, nickname, access_token FROM user_tokens ORDER BY nickname")).fetchall()
-
-    if not contas:
-        st.warning("Nenhuma conta cadastrada.")
-        return
-
-    # Botão para rodar todas as contas de uma vez
-    if st.button("🚀 Reprocessar Todas as Contas", use_container_width=True):
-        with st.spinner("🔄 Executando para todas as contas..."):
-            for i, row in enumerate(contas):
-                ml_user_id, nickname, access_token = row
-                st.subheader(f"🔗 Conta: {nickname}")
-
-                novas = get_full_sales(str(ml_user_id), access_token)
-                atualizadas, _ = revisar_status_historico(str(ml_user_id), access_token, return_changes=False)
-
-                st.success(f"✅ {novas} novas vendas importadas")
-                st.info(f"♻️ {atualizadas} vendas com status alterados")
-
-    # Por conta individual
-    for row in contas:
-        ml_user_id, nickname, access_token = row
-
-        with st.expander(f"🔗 Conta: {nickname}", expanded=False):
-            col1, col2, col3 = st.columns([2, 2, 3])
-
-            with col1:
-                if st.button("🆕 Vendas Recentes", key=f"recentes_{ml_user_id}"):
-                    progresso = st.progress(0, text="🔁 Buscando novas vendas...")
-                    with st.spinner("🔄 Importando vendas novas..."):
-                        novas = get_full_sales(str(ml_user_id), access_token)
-                        progresso.progress(100, text="✅ Novas vendas importadas")
-                        st.success(f"✅ {novas} novas vendas importadas.")
-                        st.cache_data.clear()
-                    progresso.empty()
-
-            with col2:
-                if st.button("📜 Histórico Completo", key=f"historico_{ml_user_id}"):
-                    progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
-                    with st.spinner("♻️ Verificando alterações de status..."):
-                        atualizadas, alteracoes = revisar_status_historico(str(ml_user_id), access_token, return_changes=True)
-                        progresso.progress(100, text="✅ Reprocessamento concluído!")
-                        st.info(f"♻️ {atualizadas} vendas com status alterados.")
-                        st.cache_data.clear()
-                    progresso.empty()
-
-                    if alteracoes:
-                        df_alt = pd.DataFrame(alteracoes, columns=["order_id", "status_antigo", "status_novo"])
-                        csv = df_alt.to_csv(index=False).encode("utf-8")
-                        st.download_button(
-                            label="⬇️ Exportar Alterações de Status",
-                            data=csv,
-                            file_name=f"status_alterados_{nickname}.csv",
-                            mime="text/csv",
-                            use_container_width=True
-                        )
-
-            with col3:
-                st.write(f"**User ID:** `{ml_user_id}`")
 
 def mostrar_expedicao_logistica():
     st.header("🚚 Expedição e Logística")
