@@ -322,7 +322,7 @@ def mostrar_dashboard():
         placeholder = st.empty()
         with placeholder:
             st.success(f"{count} vendas novas sincronizadas com sucesso!")
-            time.sleep(4)
+            time.sleep(3)
         placeholder.empty()
         st.session_state["vendas_sincronizadas"] = True
 
@@ -332,39 +332,41 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda cadastrada.")
         return
 
-    # --- CSS para compactar inputs ---
+    # --- CSS para compactar inputs e remover espaços ---
     st.markdown(
         """
         <style>
         .stSelectbox > div, .stDateInput > div {
-            padding-top: 0.1rem;
-            padding-bottom: 0.1rem;
+            padding-top: 0rem;
+            padding-bottom: 0rem;
         }
         .stMultiSelect {
             max-height: 40px;
             overflow-y: auto;
         }
+        .block-container {
+            padding-top: 0rem;
+        }
+        .stMarkdown h1 { display: none; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # --- Expander de contas ---
-    with st.expander("Contas (opcional)", expanded=False):
+    # --- Expander de contas (opcional) ---
+    with st.expander("Contas", expanded=False):
         contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
         contas_lst = contas_df["nickname"].astype(str).tolist()
-        selecionadas = st.multiselect(
-            "", options=contas_lst, default=contas_lst, key="contas_ms"
-        )
+        selecionadas = st.multiselect("", options=contas_lst, default=contas_lst, key="contas_ms")
         if selecionadas:
             df_full = df_full[df_full["nickname"].isin(selecionadas)]
 
-    # --- linha única de filtros: Filtro Rápido | De | Até ---
-    col1, col2, col3 = st.columns([2, 1.3, 1.3])
+    # --- Linha única de filtros: Rápido | De | Até | Status ---
+    col1, col2, col3, col4 = st.columns([1.5, 1.2, 1.2, 1.5])
 
     with col1:
         filtro_rapido = st.selectbox(
-            "Filtro",
+            "",  # escondido
             [
                 "Período Personalizado",
                 "Hoje",
@@ -375,8 +377,7 @@ def mostrar_dashboard():
                 "Este Ano"
             ],
             index=1,
-            key="filtro_quick",
-            label_visibility="collapsed"
+            key="filtro_quick"
         )
 
     hoje = pd.Timestamp.now().date()
@@ -405,23 +406,28 @@ def mostrar_dashboard():
             "De", value=de,
             min_value=data_min, max_value=data_max,
             disabled=not custom,
-            key="de_q",
-            label_visibility="collapsed"
+            key="de_q"
         )
+
     with col3:
         ate = st.date_input(
             "Até", value=ate,
             min_value=data_min, max_value=data_max,
             disabled=not custom,
-            key="ate_q",
-            label_visibility="collapsed"
+            key="ate_q"
         )
 
-    # --- aplica filtro de datas ---
+    with col4:
+        status_options = df_full["status"].dropna().unique().tolist()
+        status_selecionado = st.selectbox("Status", ["Todos"] + status_options, index=0)
+
+    # --- Filtro de datas e status ---
     df = df_full[
         (df_full["date_adjusted"].dt.date >= de) &
         (df_full["date_adjusted"].dt.date <= ate)
     ]
+    if status_selecionado != "Todos":
+        df = df[df["status"] == status_selecionado]
 
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
