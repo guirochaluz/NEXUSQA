@@ -822,36 +822,45 @@ def mostrar_anuncios():
 def mostrar_relatorios():
     st.header("📋 Relatórios de Vendas")
 
+    # --- carrega vendas e nickname das contas ---
     df = carregar_vendas()
+    contas_df = pd.read_sql(text("SELECT user_id, nickname FROM user_tokens"), engine)
 
     if df.empty:
         st.warning("Nenhum dado encontrado.")
         return
 
+    # --- converte datas e junta com apelidos das contas ---
     df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
+    df = df.merge(contas_df, on='user_id', how='left')  # adiciona nickname
 
-    # Filtro de período
-    col1, col2 = st.columns(2)
+    # --- filtros de período e conta ---
+    col1, col2, col3 = st.columns([1.3, 1.3, 2])
     with col1:
         data_ini = st.date_input("De:", value=df['date_adjusted'].min().date())
     with col2:
         data_fim = st.date_input("Até:", value=df['date_adjusted'].max().date())
+    with col3:
+        contas = df["nickname"].dropna().unique().tolist()
+        contas_sel = st.multiselect("Filtrar por Conta", contas, default=contas)
 
-    df_filt = df.loc[
+    # --- aplica filtros ---
+    df_filt = df[
         (df['date_adjusted'].dt.date >= data_ini) &
-        (df['date_adjusted'].dt.date <= data_fim)
+        (df['date_adjusted'].dt.date <= data_fim) &
+        (df['nickname'].isin(contas_sel))
     ]
 
     if df_filt.empty:
-        st.warning("Nenhuma venda no período selecionado.")
+        st.warning("Nenhuma venda no período/conta selecionado.")
         return
 
-    # Adiciona coluna de link para o anúncio
+    # --- adiciona link do anúncio ---
     df_filt['link'] = df_filt['item_id'].apply(
         lambda x: f"[🔗 Ver Anúncio](https://www.mercadolivre.com.br/anuncio/{x})"
     )
 
-    # Reorganiza e seleciona as colunas principais
+    # --- define colunas a exibir ---
     colunas = [
         'date_adjusted',
         'item_id',
@@ -859,16 +868,17 @@ def mostrar_relatorios():
         'quantity',
         'unit_price',
         'total_amount',
+        'sku',
         'order_id',
         'buyer_nickname',
         'ml_user_id',
+        'nickname',
         'status',
         'link'
     ]
-
     df_exibir = df_filt[colunas].copy()
 
-    # Formatação visual
+    # --- formata campos de valor ---
     df_exibir['unit_price'] = df_exibir['unit_price'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
@@ -876,9 +886,10 @@ def mostrar_relatorios():
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
 
+    # --- exibe tabela no app ---
     st.dataframe(df_exibir, use_container_width=True)
 
-    # Exportação CSV com dados crus
+    # --- exportação em CSV com dados crus (não formatados) ---
     csv = df_filt[colunas].to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Exportar CSV das Vendas",
