@@ -312,19 +312,32 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def mostrar_dashboard():
-
-    # --- botão de sincronização ---
-    if st.button("🔄 Sincronizar Vendas"):
-        count = sync_all_accounts()
-        st.cache_data.clear()
-        st.success(f"{count} vendas novas sincronizadas com sucesso!")
-        st.rerun()
+    # --- sincroniza as vendas automaticamente apenas 1x ao carregar ---
+    if "vendas_sincronizadas" not in st.session_state:
+        with st.spinner("🔄 Sincronizando vendas..."):
+            count = sync_all_accounts()
+            st.cache_data.clear()
+            st.success(f"{count} vendas novas sincronizadas com sucesso!")
+        st.session_state["vendas_sincronizadas"] = True
 
     # --- carrega todos os dados ---
     df_full = carregar_vendas(None)
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
+
+    # --- CSS para inputs mais compactos ---
+    st.markdown(
+        """
+        <style>
+        .stSelectbox > div, .stDateInput > div {
+            padding-top: 0.1rem;
+            padding-bottom: 0.1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # --- filtro discreto de Contas no topo ---
     contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
@@ -336,69 +349,62 @@ def mostrar_dashboard():
         key="contas_ms",
         help="Filtre por uma ou mais contas; deixe todas selecionadas para não filtrar."
     )
-    # aplica filtro de contas
     if selecionadas:
         df_full = df_full[df_full["nickname"].isin(selecionadas)]
 
     # --- linha única de filtros: Quick-Filter | De | Até ---
-    col1, col2, col3 = st.columns([2, 1.5, 1.5])
+    col1, col2, col3 = st.columns([2, 1.3, 1.3])
 
-        # 1) Filtro Rápido (incluindo “Ontem”)
-    filtro_rapido = col1.selectbox(
-        "🔹 Filtro Rápido",
-        [
-            "Período Personalizado",
-            "Hoje",
-            "Ontem",
-            "Últimos 7 Dias",
-            "Este Mês",
-            "Últimos 30 Dias"
-        ], index = 1,
-        key="filtro_quick"
-    )
-    
-    # 2) Determina intervalos de data (com “Ontem”)
+    with col1:
+        filtro_rapido = st.selectbox(
+            "Filtro",
+            [
+                "Período Personalizado",
+                "Hoje",
+                "Ontem",
+                "Últimos 7 Dias",
+                "Este Mês",
+                "Últimos 30 Dias"
+            ],
+            index=1,
+            key="filtro_quick",
+            label_visibility="collapsed"
+        )
+
+    hoje = pd.Timestamp.now().date()
     data_min = df_full["date_adjusted"].dt.date.min()
     data_max = df_full["date_adjusted"].dt.date.max()
-    hoje     = pd.Timestamp.now().date()
-    
+
     if filtro_rapido == "Hoje":
         de = ate = min(hoje, data_max)
-    
     elif filtro_rapido == "Ontem":
-        ontem = hoje - pd.Timedelta(days=1)
-        de, ate = ontem, ontem
-    
+        de = ate = hoje - pd.Timedelta(days=1)
     elif filtro_rapido == "Últimos 7 Dias":
         de, ate = hoje - pd.Timedelta(days=7), hoje
-    
     elif filtro_rapido == "Este Mês":
         de, ate = hoje.replace(day=1), hoje
-    
     elif filtro_rapido == "Últimos 30 Dias":
         de, ate = hoje - pd.Timedelta(days=30), hoje
-    
-    else:  # Período Personalizado
+    else:
         de, ate = data_min, data_max
 
-    # 3) Date inputs (sempre visíveis, mas desabilitados se não for personalizado)
     custom = (filtro_rapido == "Período Personalizado")
-    de = col2.date_input(
-        "🔹 De",
-        value=de,
-        min_value=data_min,
-        max_value=data_max,
-        disabled=not custom,
-        key="de_q"
-    )
-    ate = col3.date_input(
-        "🔹 Até",
-        value=ate,
-        min_value=data_min,
-        max_value=data_max,
-        disabled=not custom,
-        key="ate_q"
-    )
+    with col2:
+        de = st.date_input(
+            "De", value=de,
+            min_value=data_min, max_value=data_max,
+            disabled=not custom,
+            key="de_q",
+            label_visibility="collapsed"
+        )
+    with col3:
+        ate = st.date_input(
+            "Até", value=ate,
+            min_value=data_min, max_value=data_max,
+            disabled=not custom,
+            key="ate_q",
+            label_visibility="collapsed"
+        )
 
     # --- aplica filtro de datas ---
     df = df_full[
