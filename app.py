@@ -312,12 +312,18 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def mostrar_dashboard():
+    import time
+
     # --- sincroniza as vendas automaticamente apenas 1x ao carregar ---
     if "vendas_sincronizadas" not in st.session_state:
         with st.spinner("🔄 Sincronizando vendas..."):
             count = sync_all_accounts()
             st.cache_data.clear()
+        placeholder = st.empty()
+        with placeholder:
             st.success(f"{count} vendas novas sincronizadas com sucesso!")
+            time.sleep(4)
+        placeholder.empty()
         st.session_state["vendas_sincronizadas"] = True
 
     # --- carrega todos os dados ---
