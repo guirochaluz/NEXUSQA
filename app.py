@@ -824,7 +824,7 @@ def mostrar_relatorios():
 
     # --- carrega vendas e nickname das contas ---
     df = carregar_vendas()
-    contas_df = pd.read_sql(text("SELECT user_id, nickname FROM user_tokens"), engine)
+    contas_df = pd.read_sql(text("SELECT ml_user_id, nickname FROM user_tokens"), engine)
 
     if df.empty:
         st.warning("Nenhum dado encontrado.")
@@ -832,7 +832,7 @@ def mostrar_relatorios():
 
     # --- converte datas e junta com apelidos das contas ---
     df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
-    df = df.merge(contas_df, on='user_id', how='left')  # adiciona nickname
+    df = df.merge(contas_df, on='ml_user_id', how='left')  # join usando ml_user_id
 
     # --- filtros de período e conta ---
     col1, col2, col3 = st.columns([1.3, 1.3, 2])
