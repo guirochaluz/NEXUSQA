@@ -405,3 +405,18 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
         db.close()
 
     return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
+
+def atualizar_sales_com_sku(engine):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE sales
+            SET
+                sku = s.sku,
+                quantity_sku = s.quantity,
+                custo_unitario = s.custo_unitario,
+                level1 = s.level1,
+                level2 = s.level2
+            FROM skumlb m
+            JOIN sku s ON s.sku = m.sku
+            WHERE sales.item_id = m.mlb;
+        """))
