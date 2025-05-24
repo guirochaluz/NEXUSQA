@@ -971,6 +971,23 @@ def mostrar_relatorios():
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
 
+    # 🔄 Botão de atualização total (atualiza banco + recarrega dados)
+    if st.button("🔄 Atualizar Dados"):
+        atualizar_sales_com_sku(engine)
+        st.session_state["atualizar_gestao_sku"] = True
+
+    # 🔁 Recarrega os dados do banco se necessário
+    if st.session_state.get("atualizar_gestao_sku", False) or "df_gestao_sku" not in st.session_state:
+        df = pd.read_sql(text("""
+            SELECT s.item_id, s.sku, s.level1, s.level2, s.custo_unitario, s.quantity_sku
+            FROM sales s
+            ORDER BY s.date_closed DESC
+        """), engine)
+        st.session_state["df_gestao_sku"] = df
+        st.session_state["atualizar_gestao_sku"] = False
+    else:
+        df = st.session_state["df_gestao_sku"]
+
     # 1️⃣ Métricas principais
     with engine.begin() as conn:
         total_com_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE sku IS NOT NULL")).scalar()
@@ -991,26 +1008,6 @@ def mostrar_gestao_sku():
 
     st.markdown("---")
     st.markdown("### 🔍 Filtros de Diagnóstico")
-
-    # 🔄 Botão de atualização
-    if "atualizar_gestao_sku" not in st.session_state:
-        st.session_state["atualizar_gestao_sku"] = False
-
-    if st.button("🔄 Atualizar Dados"):
-        st.session_state["atualizar_gestao_sku"] = True
-
-    # 2️⃣ Consulta base com quantity_sku (join com tabela sku)
-    if st.session_state["atualizar_gestao_sku"] or "df_gestao_sku" not in st.session_state:
-        df = pd.read_sql(text("""
-            SELECT s.item_id, s.sku, s.level1, s.level2, s.custo_unitario, k.quantity AS quantity_sku
-            FROM sales s
-            LEFT JOIN sku k ON s.sku = k.sku
-            ORDER BY s.date_closed DESC
-        """), engine)
-        st.session_state["df_gestao_sku"] = df
-        st.session_state["atualizar_gestao_sku"] = False
-    else:
-        df = st.session_state["df_gestao_sku"]
 
     # 3️⃣ Filtros dinâmicos
     colf1, colf2, colf3, colf4, colf5 = st.columns([1.2, 1.2, 1.2, 1.2, 2])
@@ -1137,6 +1134,7 @@ def mostrar_gestao_sku():
                               AND sales.sku IS NULL
                         """))
                     st.success("✅ Relações SKU-MLB importadas e conciliadas com sucesso!")
+                    st.session_state["atualizar_gestao_sku"] = True
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Erro ao importar ou conciliar dados: {e}")
