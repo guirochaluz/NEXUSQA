@@ -51,9 +51,9 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
             data_min = data_max - relativedelta(years=1)
 
         if data_min.tzinfo is None:
-            data_min = data_min.replace(tzinfo=parser.tz.UTC)
+            data_min = data_min.replace(tzinfo=tzutc())
         if data_max.tzinfo is None:
-            data_max = data_max.replace(tzinfo=parser.tz.UTC)
+            data_max = data_max.replace(tzinfo=tzutc())
 
         current_start = data_min.replace(day=1)
         while current_start <= data_max:
@@ -335,9 +335,9 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
             return 0, []
 
         if data_min.tzinfo is None:
-            data_min = data_min.replace(tzinfo=parser.tz.UTC)
+            data_min = data_min.replace(tzinfo=tzutc())
         if data_max.tzinfo is None:
-            data_max = data_max.replace(tzinfo=parser.tz.UTC)
+            data_max = data_max.replace(tzinfo=tzutc())
 
         current_start = data_min.replace(day=1)
         while current_start <= data_max:
