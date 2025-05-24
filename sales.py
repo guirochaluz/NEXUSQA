@@ -138,7 +138,6 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
         # 2) Parâmetros da chamada incremental
         params = {
             "seller": ml_user_id,
-            "order.status": "paid",
             "limit": FULL_PAGE_SIZE,
             "sort": "date_desc",
             "order.date_closed.from": last_db_date.isoformat(),
