@@ -212,7 +212,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.level2,
                    u.nickname
               FROM sales s
-              LEFT JOIN user_tokens u ON s.ml_user_id = u.conta_id
+              LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
         """)
         # **ADICIONE esta linha abaixo**
         df = pd.read_sql(sql, engine)
