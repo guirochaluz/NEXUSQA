@@ -318,6 +318,7 @@ def mostrar_dashboard():
     if "vendas_sincronizadas" not in st.session_state:
         with st.spinner("🔄 Sincronizando vendas..."):
             count = sync_all_accounts()
+            padronizar_status_sales(engine)  # 👈 Aqui entra a padronização após sincronizar
             st.cache_data.clear()
         placeholder = st.empty()
         with placeholder:
