@@ -298,8 +298,8 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     """
-    Revisa todas as vendas da conta, atualiza o status no banco e padroniza os existentes.
-    Divide por faixa de datas para evitar o erro de offset > 10000 da API do Mercado Livre.
+    Revisa todas as vendas da conta, atualiza o status no banco conforme a API do Mercado Livre.
+    Divide por faixa de datas para evitar erro de paginação (offset > 10000).
     """
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
@@ -309,26 +309,11 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     import requests
     from sqlalchemy import func
 
-    tradutor_status = {
-        "paid": "Pago",
-        "pago": "Pago",
-        "cancelled": "Cancelado",
-        "cancelado": "Cancelado",
-        "payment_required": "Pagamento Pendente",
-        "payment_in_process": "Pagamento em Processamento",
-        "partially_paid": "Parcialmente Pago",
-        "partially_refunded": "Parcialmente Reembolsado",
-        "parcialmente reembolsado": "Parcialmente Reembolsado",
-        "pending_cancel": "Cancelamento Pendente",
-        "cancelamento pendente": "Cancelamento Pendente",
-    }
-
     db = SessionLocal()
     atualizadas = 0
     alteracoes = []
 
-
-        # --- Continuação: Atualiza com base na API (como antes) ---
+    try:
         data_min = db.query(func.min(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
         data_max = db.query(func.max(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
 
@@ -365,18 +350,13 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                 for o in orders:
                     oid = str(o["id"])
                     status_api_raw = o.get("status", "").strip().lower()
-                    status_api_formatado = tradutor_status.get(status_api_raw, status_api_raw.capitalize())
 
                     existing_sale = db.query(Sale).filter_by(order_id=oid).first()
-                    if existing_sale:
-                        status_local = existing_sale.status.strip().lower() if existing_sale.status else ""
-                        status_local_formatado = tradutor_status.get(status_local, status_local.capitalize())
-
-                        if status_local_formatado != status_api_formatado:
-                            if return_changes:
-                                alteracoes.append((oid, status_local_formatado, status_api_formatado))
-                            existing_sale.status = status_api_formatado
-                            atualizadas += 1
+                    if existing_sale and existing_sale.status != status_api_raw:
+                        if return_changes:
+                            alteracoes.append((oid, existing_sale.status, status_api_raw))
+                        existing_sale.status = status_api_raw
+                        atualizadas += 1
 
                 db.commit()
                 if len(orders) < 50:
