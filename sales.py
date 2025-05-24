@@ -297,7 +297,7 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         level2           = level2
     )
 
-def revisar_status_historico_smart(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
+def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     """
     Revisa todas as vendas da conta e atualiza o status no banco, dividindo por faixa de datas
     para evitar o erro de offset > 10000 da API do Mercado Livre.
