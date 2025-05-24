@@ -327,19 +327,6 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     atualizadas = 0
     alteracoes = []
 
-    try:
-        # --- PASSO EXTRA: Padroniza todos os status já salvos no banco ---
-        todas_vendas = db.query(Sale).filter(Sale.ml_user_id == int(ml_user_id)).all()
-        for venda in todas_vendas:
-            status_atual = venda.status.strip().lower() if venda.status else ""
-            status_padrao = tradutor_status.get(status_atual, status_atual.capitalize())
-
-            if venda.status != status_padrao:
-                if return_changes:
-                    alteracoes.append((venda.order_id, venda.status, status_padrao))
-                venda.status = status_padrao
-                atualizadas += 1
-        db.commit()
 
         # --- Continuação: Atualiza com base na API (como antes) ---
         data_min = db.query(func.min(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
