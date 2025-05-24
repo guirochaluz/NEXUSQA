@@ -298,12 +298,12 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     """
-    Revisa todas as vendas da conta e atualiza o status no banco, dividindo por faixa de datas
-    para evitar o erro de offset > 10000 da API do Mercado Livre.
+    Revisa todas as vendas da conta, atualiza o status no banco e padroniza os existentes.
+    Divide por faixa de datas para evitar o erro de offset > 10000 da API do Mercado Livre.
     """
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
-    from dateutil import parser
+    from dateutil.tz import tzutc
     from db import SessionLocal
     from models import Sale
     import requests
@@ -328,11 +328,25 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     alteracoes = []
 
     try:
+        # --- PASSO EXTRA: Padroniza todos os status já salvos no banco ---
+        todas_vendas = db.query(Sale).filter(Sale.ml_user_id == int(ml_user_id)).all()
+        for venda in todas_vendas:
+            status_atual = venda.status.strip().lower() if venda.status else ""
+            status_padrao = tradutor_status.get(status_atual, status_atual.capitalize())
+
+            if venda.status != status_padrao:
+                if return_changes:
+                    alteracoes.append((venda.order_id, venda.status, status_padrao))
+                venda.status = status_padrao
+                atualizadas += 1
+        db.commit()
+
+        # --- Continuação: Atualiza com base na API (como antes) ---
         data_min = db.query(func.min(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
         data_max = db.query(func.max(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
 
         if not data_min or not data_max:
-            return 0, []
+            return atualizadas, alteracoes
 
         if data_min.tzinfo is None:
             data_min = data_min.replace(tzinfo=tzutc())
