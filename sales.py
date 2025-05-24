@@ -34,10 +34,9 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
         while True:
             params = {
                 "seller": ml_user_id,
-                "order.status": "paid",
                 "offset": offset,
                 "limit": FULL_PAGE_SIZE,
-                "sort": "date_desc",  # garante ordem cronológica
+                "sort": "date_asc",  # garante ordem cronológica
             }
             headers = {"Authorization": f"Bearer {access_token}"}
             resp = requests.get(API_BASE, params=params, headers=headers)
