@@ -992,12 +992,25 @@ def mostrar_gestao_sku():
     st.markdown("---")
     st.markdown("### 🔍 Filtros de Diagnóstico")
 
-    # 2️⃣ Consulta base
-    df = pd.read_sql(text("""
-        SELECT id, item_id, sku, level1, level2, custo_unitario
-        FROM sales
-        ORDER BY date_closed DESC
-    """), engine)
+    # 🔄 Botão de atualização
+    if "atualizar_gestao_sku" not in st.session_state:
+        st.session_state["atualizar_gestao_sku"] = False
+
+    if st.button("🔄 Atualizar Dados"):
+        st.session_state["atualizar_gestao_sku"] = True
+
+    # 2️⃣ Consulta base com quantity_sku (join com tabela sku)
+    if st.session_state["atualizar_gestao_sku"] or "df_gestao_sku" not in st.session_state:
+        df = pd.read_sql(text("""
+            SELECT s.item_id, s.sku, s.level1, s.level2, s.custo_unitario, k.quantity AS quantity_sku
+            FROM sales s
+            LEFT JOIN sku k ON s.sku = k.sku
+            ORDER BY s.date_closed DESC
+        """), engine)
+        st.session_state["df_gestao_sku"] = df
+        st.session_state["atualizar_gestao_sku"] = False
+    else:
+        df = st.session_state["df_gestao_sku"]
 
     # 3️⃣ Filtros dinâmicos
     colf1, colf2, colf3, colf4, colf5 = st.columns([1.2, 1.2, 1.2, 1.2, 2])
@@ -1030,7 +1043,7 @@ def mostrar_gestao_sku():
                          or filtro_txt in str(row["level1"]).lower()
                          or filtro_txt in str(row["level2"]).lower(), axis=1)]
 
-    # 4️⃣ Tabela logo após os filtros
+    # 4️⃣ Tabela de visualização
     st.markdown("### 📊 Tabela de Vendas com SKUs")
     if df.empty:
         st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
