@@ -420,3 +420,23 @@ def atualizar_sales_com_sku(engine):
             JOIN sku s ON s.sku = m.sku
             WHERE sales.item_id = m.mlb;
         """))
+
+def padronizar_status_sales(engine):
+    """
+    Atualiza a tabela sales:
+    - Converte 'paid' (qualquer variação de maiúscula/minúscula) para 'Pago'
+    - Todos os outros status viram 'Cancelado'
+    """
+    with engine.begin() as conn:
+        # Primeiro, tudo vira 'Cancelado'
+        conn.execute(text("""
+            UPDATE sales
+            SET status = 'Cancelado'
+        """))
+        
+        # Depois, sobrescreve para 'Pago' onde for 'paid'
+        conn.execute(text("""
+            UPDATE sales
+            SET status = 'Pago'
+            WHERE LOWER(status) = 'paid'
+        """))
