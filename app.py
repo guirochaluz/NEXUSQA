@@ -355,6 +355,17 @@ def mostrar_dashboard():
         unsafe_allow_html=True,
     )
 
+    # --- Estilo para mostrar as contas em linha única, sem scroll vertical ---
+    st.markdown("""
+        <style>
+        div[data-baseweb="select"] > div {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            scrollbar-width: thin;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     # --- Expander de contas (opcional) ---
     with st.expander("Contas", expanded=False):
         contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
@@ -430,26 +441,71 @@ def mostrar_dashboard():
     ]
     if status_selecionado != "Todos":
         df = df[df["status"] == status_selecionado]
-
+    
+    # --- Filtros adicionais: Level1, Level2, SKU ---
+    with st.expander("🔍 Filtros Avançados", expanded=False):
+        col_a1, col_a2, col_a3 = st.columns(3)
+    
+        op_level1 = col_a1.multiselect(
+            "Level1",
+            options=sorted(df_full["level1"].dropna().unique().tolist()),
+            default=[],
+        )
+        if op_level1:
+            df = df[df["level1"].isin(op_level1)]
+    
+        op_level2 = col_a2.multiselect(
+            "Level2",
+            options=sorted(df_full["level2"].dropna().unique().tolist()),
+            default=[],
+        )
+        if op_level2:
+            df = df[df["level2"].isin(op_level2)]
+    
+        op_sku = col_a3.multiselect(
+            "SKU",
+            options=sorted(df_full["sku"].dropna().unique().tolist()),
+            default=[],
+        )
+        if op_sku:
+            df = df[df["sku"].isin(op_sku)]
+    
+    # Verifica se há dados após os filtros
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
         return
-
-
-    # =================== Ajuste de Timezone ===================
     
-    # 4) Métricas
-    total_vendas = len(df)
-    total_valor  = df["total_amount"].sum()
-    total_itens  = df["quantity"].sum()
-    ticket_medio = total_valor / total_vendas if total_vendas else 0
-
-    # Exibição das métricas
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🧾 Vendas Realizadas", total_vendas)
-    c2.metric("💰 Receita Total", format_currency(total_valor))
-    c3.metric("📦 Itens Vendidos", int(total_itens))
-    c4.metric("🎯 Ticket Médio", format_currency(ticket_medio))
+    # 4️⃣ Métricas detalhadas
+    
+    # Métricas base
+    total_vendas   = len(df)
+    total_valor    = df["total_amount"].sum()
+    total_itens    = df["quantity"].sum()
+    ticket_venda   = total_valor / total_vendas if total_vendas else 0
+    ticket_unidade = total_valor / total_itens if total_itens else 0
+    
+    # Custos estimados
+    frete = total_valor * 0.10
+    taxa_mktplace = total_valor * 0.20
+    cmv = (df["quantity"] * df["custo_unitario"].fillna(0)).sum()
+    margem_operacional = total_valor - frete - taxa_mktplace - cmv
+    
+    # Linha 1: Faturamento e custos
+    st.subheader("💼 Indicadores Financeiros")
+    colf1, colf2, colf3, colf4, colf5 = st.columns(5)
+    colf1.metric("💰 Faturamento", format_currency(total_valor))
+    colf2.metric("🚚 Frete (10%)", format_currency(frete))
+    colf3.metric("📉 Taxa Marketplace (20%)", format_currency(taxa_mktplace))
+    colf4.metric("📦 CMV (Custo)", format_currency(cmv))
+    colf5.metric("💵 Margem Operacional", format_currency(margem_operacional))
+    
+    # Linha 2: Volume e tickets
+    st.subheader("📊 Indicadores de Volume")
+    colv1, colv2, colv3, colv4 = st.columns(4)
+    colv1.metric("🧾 Vendas Realizadas", total_vendas)
+    colv2.metric("📦 Unidades Vendidas", int(total_itens))
+    colv3.metric("🎯 Ticket Médio por Venda", format_currency(ticket_venda))
+    colv4.metric("🎯 Ticket Médio por Unidade", format_currency(ticket_unidade))
     
     import plotly.express as px
 
