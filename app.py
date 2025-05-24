@@ -683,6 +683,10 @@ def mostrar_contas_cadastradas():
                     atualizadas, _ = revisar_status_historico(ml_user_id, access_token, return_changes=False)
                     st.info(f"♻️ {atualizadas} vendas com status alterados.")
 
+                # ✅ Executa padronização depois de todas as contas
+                padronizar_status_sales(engine)
+                st.success("✅ Todos os status foram padronizados com sucesso.")
+                    
     with col_c:
         if st.button("📜 Reprocessar Histórico (Todas)", use_container_width=True):
             with st.spinner("📜 Reprocessando histórico completo..."):
