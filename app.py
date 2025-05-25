@@ -450,33 +450,39 @@ def mostrar_dashboard():
     if status_selecionado != "Todos":
         df = df[df["status"] == status_selecionado]
     
-    # --- Filtros adicionais: Level1, Level2, SKU ---
     with st.expander("🔍 Filtros Avançados", expanded=False):
-        col_a1, col_a2, col_a3 = st.columns(3)
+        # LEVEL 1
+        level1_opcoes = sorted(df_full["level1"].dropna().unique().tolist())
+        st.markdown("**Level1:**")
+        colunas = st.columns(4)
+        level1_check = []
+        for i, op in enumerate(level1_opcoes):
+            if colunas[i % 4].checkbox(op, key=f"l1_{op}"):
+                level1_check.append(op)
+        if level1_check:
+            df = df[df["level1"].isin(level1_check)]
     
-        op_level1 = col_a1.multiselect(
-            "Level1",
-            options=sorted(df_full["level1"].dropna().unique().tolist()),
-            default=[],
-        )
-        if op_level1:
-            df = df[df["level1"].isin(op_level1)]
+        # LEVEL 2
+        level2_opcoes = sorted(df_full["level2"].dropna().unique().tolist())
+        st.markdown("**Level2:**")
+        colunas = st.columns(4)
+        level2_check = []
+        for i, op in enumerate(level2_opcoes):
+            if colunas[i % 4].checkbox(op, key=f"l2_{op}"):
+                level2_check.append(op)
+        if level2_check:
+            df = df[df["level2"].isin(level2_check)]
     
-        op_level2 = col_a2.multiselect(
-            "Level2",
-            options=sorted(df_full["level2"].dropna().unique().tolist()),
-            default=[],
-        )
-        if op_level2:
-            df = df[df["level2"].isin(op_level2)]
-    
-        op_sku = col_a3.multiselect(
-            "SKU",
-            options=sorted(df_full["sku"].dropna().unique().tolist()),
-            default=[],
-        )
-        if op_sku:
-            df = df[df["sku"].isin(op_sku)]
+        # SKU
+        sku_opcoes = sorted(df_full["sku"].dropna().unique().tolist())
+        st.markdown("**SKU:**")
+        colunas = st.columns(4)
+        sku_check = []
+        for i, op in enumerate(sku_opcoes):
+            if colunas[i % 4].checkbox(op, key=f"sku_{op}"):
+                sku_check.append(op)
+        if sku_check:
+            df = df[df["sku"].isin(sku_check)]
     
     # Verifica se há dados após os filtros
     if df.empty:
