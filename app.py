@@ -450,33 +450,43 @@ def mostrar_dashboard():
     if status_selecionado != "Todos":
         df = df[df["status"] == status_selecionado]
     
-    # --- Filtros adicionais diretos (multiselect) ---
-    colf1, colf2 = st.columns(2)
+    # --- Filtro de datas e status ---
+    df = df_full[
+        (df_full["date_adjusted"].dt.date >= de) &
+        (df_full["date_adjusted"].dt.date <= ate)
+    ]
+    if status_selecionado != "Todos":
+        df = df[df["status"] == status_selecionado]
     
-    # Filtro Level1
-    level1_opcoes = sorted(df["level1"].dropna().unique().tolist())
-    level1_selecionados = colf1.multiselect(
-        "📂 Filtrar por Level1",
-        options=level1_opcoes,
-        default=[],
-    )
-    if level1_selecionados:
-        df = df[df["level1"].isin(level1_selecionados)]
+    # --- Filtros adicionais com checkbox e expander ---
+    with st.expander("🔍 Filtros Avançados", expanded=False):
+        # LEVEL 1
+        level1_opcoes = sorted(df["level1"].dropna().unique().tolist())
+        st.markdown("**Level1:**")
+        colunas = st.columns(4)
+        level1_check = []
+        for i, op in enumerate(level1_opcoes):
+            if colunas[i % 4].checkbox(op, key=f"l1_{op}"):
+                level1_check.append(op)
+        if level1_check:
+            df = df[df["level1"].isin(level1_check)]
     
-    # Filtro Level2 (já com df filtrado por Level1)
-    level2_opcoes = sorted(df["level2"].dropna().unique().tolist())
-    level2_selecionados = colf2.multiselect(
-        "📁 Filtrar por Level2",
-        options=level2_opcoes,
-        default=[],
-    )
-    if level2_selecionados:
-        df = df[df["level2"].isin(level2_selecionados)]
+        # LEVEL 2
+        level2_opcoes = sorted(df["level2"].dropna().unique().tolist())
+        st.markdown("**Level2:**")
+        colunas = st.columns(4)
+        level2_check = []
+        for i, op in enumerate(level2_opcoes):
+            if colunas[i % 4].checkbox(op, key=f"l2_{op}"):
+                level2_check.append(op)
+        if level2_check:
+            df = df[df["level2"].isin(level2_check)]
     
     # Verifica se há dados após os filtros
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
         st.stop()
+
 
     
     # 4️⃣ Métricas detalhadas
