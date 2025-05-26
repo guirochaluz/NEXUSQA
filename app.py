@@ -363,31 +363,28 @@ def mostrar_dashboard():
         unsafe_allow_html=True,
     )
 
-    # --- Estilo para mostrar as contas em linha única, sem scroll vertical ---
-    st.markdown("""
-        <style>
-        div[data-baseweb="select"] > div {
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            scrollbar-width: thin;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # --- Filtro de contas fixo com checkboxes lado a lado ---
+    contas_df = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
+    contas_lst = contas_df["nickname"].astype(str).tolist()
     
-    # --- Expander de contas (opcional) ---
-    with st.expander("Contas", expanded=False):
-        contas_df  = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
-        contas_lst = contas_df["nickname"].astype(str).tolist()
-        selecionadas = st.multiselect("", options=contas_lst, default=contas_lst, key="contas_ms")
-        if selecionadas:
-            df_full = df_full[df_full["nickname"].isin(selecionadas)]
+    st.markdown("**🧾 Contas Mercado Livre:**")
+    colunas_contas = st.columns(8)  # ajuste o número conforme necessário
+    selecionadas = []
+    
+    for i, conta in enumerate(contas_lst):
+        if colunas_contas[i % 8].checkbox(conta, value=True, key=f"conta_{conta}"):
+            selecionadas.append(conta)
+    
+    if selecionadas:
+        df_full = df_full[df_full["nickname"].isin(selecionadas)]
+
 
     # --- Linha única de filtros: Rápido | De | Até | Status ---
     col1, col2, col3, col4 = st.columns([1.5, 1.2, 1.2, 1.5])
 
     with col1:
         filtro_rapido = st.selectbox(
-            "",  # escondido
+            "Filtrar Período",
             [
                 "Período Personalizado",
                 "Hoje",
@@ -440,7 +437,10 @@ def mostrar_dashboard():
 
     with col4:
         status_options = df_full["status"].dropna().unique().tolist()
-        status_selecionado = st.selectbox("Status", ["Todos"] + status_options, index=0)
+        status_opcoes = ["Todos"] + status_options
+        index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
+        
+        status_selecionado = st.selectbox("Status", status_opcoes, index=index_padrao)
 
         # --- Filtro de datas e status ---
     df = df_full[
@@ -503,11 +503,11 @@ def mostrar_dashboard():
     colf1.metric("💰 Faturamento", format_currency(total_valor))
     colf2.metric("🚚 Frete (10%)", format_currency(frete))
     colf3.metric("📉 Taxa Marketplace (20%)", format_currency(taxa_mktplace))
-    colf4.metric("📦 CMV (Custo)", format_currency(cmv))
+    colf4.metric("📦 CMV", format_currency(cmv))
     colf5.metric("💵 Margem Operacional", format_currency(margem_operacional))
     
     # Linha 2: Volume e tickets
-    st.subheader("📊 Indicadores de Volume")
+    st.subheader("📊 Indicadores de Vendas")
     colv1, colv2, colv3, colv4 = st.columns(4)
     colv1.metric("🧾 Vendas Realizadas", total_vendas)
     colv2.metric("📦 Unidades Vendidas", int(total_itens))
