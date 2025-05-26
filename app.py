@@ -450,44 +450,34 @@ def mostrar_dashboard():
     if status_selecionado != "Todos":
         df = df[df["status"] == status_selecionado]
     
-    with st.expander("🔍 Filtros Avançados", expanded=False):
-        # LEVEL 1
-        level1_opcoes = sorted(df_full["level1"].dropna().unique().tolist())
-        st.markdown("**Level1:**")
-        colunas = st.columns(4)
-        level1_check = []
-        for i, op in enumerate(level1_opcoes):
-            if colunas[i % 4].checkbox(op, key=f"l1_{op}"):
-                level1_check.append(op)
-        if level1_check:
-            df = df[df["level1"].isin(level1_check)]
+    # --- Filtros Diretos: Level1 e Level2 (sem expander) ---
     
-        # LEVEL 2
-        level2_opcoes = sorted(df_full["level2"].dropna().unique().tolist())
-        st.markdown("**Level2:**")
-        colunas = st.columns(4)
-        level2_check = []
-        for i, op in enumerate(level2_opcoes):
-            if colunas[i % 4].checkbox(op, key=f"l2_{op}"):
-                level2_check.append(op)
-        if level2_check:
-            df = df[df["level2"].isin(level2_check)]
+    # Atualiza as opções com base nos dados filtrados até aqui
+    level1_opcoes = sorted(df["level1"].dropna().unique().tolist())
+    st.markdown("**📂 Filtro: Level1**")
+    col_l1 = st.columns(4)
+    level1_selecionados = []
+    for i, op in enumerate(level1_opcoes):
+        if col_l1[i % 4].checkbox(op, key=f"level1_{op}"):
+            level1_selecionados.append(op)
+    if level1_selecionados:
+        df = df[df["level1"].isin(level1_selecionados)]
     
-        # SKU
-        sku_opcoes = sorted(df_full["sku"].dropna().unique().tolist())
-        st.markdown("**SKU:**")
-        colunas = st.columns(4)
-        sku_check = []
-        for i, op in enumerate(sku_opcoes):
-            if colunas[i % 4].checkbox(op, key=f"sku_{op}"):
-                sku_check.append(op)
-        if sku_check:
-            df = df[df["sku"].isin(sku_check)]
+    # Atualiza Level2 após Level1 aplicado
+    level2_opcoes = sorted(df["level2"].dropna().unique().tolist())
+    st.markdown("**📁 Filtro: Level2**")
+    col_l2 = st.columns(4)
+    level2_selecionados = []
+    for i, op in enumerate(level2_opcoes):
+        if col_l2[i % 4].checkbox(op, key=f"level2_{op}"):
+            level2_selecionados.append(op)
+    if level2_selecionados:
+        df = df[df["level2"].isin(level2_selecionados)]
     
     # Verifica se há dados após os filtros
     if df.empty:
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
-        return
+        st.stop()
     
     # 4️⃣ Métricas detalhadas
     
