@@ -63,7 +63,7 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
                     if db.query(Sale).filter_by(order_id=order_id).first():
                         continue
                     try:
-                        sale = _order_to_sale(order, ml_user_id, db)
+                        sale = _order_to_sale(order, ml_user_id, access_token, db)
                         db.add(sale)
                         total_saved += 1
                     except Exception as e:
@@ -143,7 +143,7 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
             oid = str(o["id"])
             existing_sale = db.query(Sale).filter_by(order_id=oid).first()
             if not existing_sale:
-                db.add(_order_to_sale(o, ml_user_id))
+                db.add(_order_to_sale(o, ml_user_id, access_token, db))
                 total_saved += 1
             else:
                 novo_status = o.get("status", "").lower()
