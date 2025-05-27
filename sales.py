@@ -229,7 +229,6 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         buyer_nickname   = buyer.get("nickname"),
         total_amount     = order.get("total_amount"),
         status           = order.get("status"),
-        status_detail    = order.get("status_detail"),
         date_closed      = parser.isoparse(order.get("date_closed")),
         item_id          = item_inf.get("id"),
         item_title       = item_inf.get("title"),
