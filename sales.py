@@ -209,6 +209,8 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         if internal_session:
             db.close()
 
+    payment_info = (order.get("payments") or [{}])[0]
+
     return Sale(
         order_id         = str(order["id"]),
         ml_user_id       = int(ml_user_id),
@@ -224,12 +226,15 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         unit_price       = item.get("unit_price"),
         shipping_id      = ship.get("id"),
         seller_sku       = seller_sku,
-    
+
         # Campos da tabela sku
         quantity_sku     = quantity_sku,
         custo_unitario   = custo_unitario,
         level1           = level1,
-        level2           = level2
+        level2           = level2,
+
+        # Preenchimento da coluna existente ml_fee com marketplace_fee
+        ml_fee           = payment_info.get("marketplace_fee"),
     )
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
