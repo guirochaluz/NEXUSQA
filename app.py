@@ -367,20 +367,48 @@ def mostrar_dashboard():
         unsafe_allow_html=True,
     )
 
-    # --- Filtro de contas fixo com checkboxes lado a lado ---
+    # --- Filtro de contas fixo com checkboxes lado a lado + botão selecionar todos ---
     contas_df = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
     
+    st.markdown("""
+        <style>
+            /* Estilo verde para checkboxes (só funciona com hack CSS para dark mode) */
+            input[type="checkbox"]:checked + div span {
+                background-color: #27ae60 !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown("**🧾 Contas Mercado Livre:**")
-    colunas_contas = st.columns(8)  # ajuste o número conforme necessário
+    
+    # Estado para controlar se todas estão selecionadas
+    if "todas_contas_marcadas" not in st.session_state:
+        st.session_state["todas_contas_marcadas"] = True
+    
+    # Botão alternar seleção
+    col_btn, _ = st.columns([1, 7])
+    with col_btn:
+        if st.button(
+            "✅ Selecionar Todos" if not st.session_state["todas_contas_marcadas"] else "❌ Desmarcar Todos",
+            use_container_width=True
+        ):
+            st.session_state["todas_contas_marcadas"] = not st.session_state["todas_contas_marcadas"]
+    
+    # Renderiza os checkboxes em colunas
+    colunas_contas = st.columns(8)
     selecionadas = []
     
     for i, conta in enumerate(contas_lst):
-        if colunas_contas[i % 8].checkbox(conta, value=True, key=f"conta_{conta}"):
+        key = f"conta_{conta}"
+        default = st.session_state["todas_contas_marcadas"]
+        if colunas_contas[i % 8].checkbox(conta, value=default, key=key):
             selecionadas.append(conta)
     
+    # Aplica filtro
     if selecionadas:
         df_full = df_full[df_full["nickname"].isin(selecionadas)]
+
 
 
     # --- Linha única de filtros: Rápido | De | Até | Status ---
