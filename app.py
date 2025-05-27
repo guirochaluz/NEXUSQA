@@ -185,6 +185,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.seller_sku,
                    s.custo_unitario,
                    s.quantity_sku,
+                   s.ml_fee,
                    s.level1,
                    s.level2,
                    u.nickname
@@ -209,6 +210,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.seller_sku,
                    s.custo_unitario,
                    s.quantity_sku,
+                   s.ml_fee,
                    s.level1,
                    s.level2,
                    u.nickname
