@@ -537,7 +537,7 @@ def mostrar_dashboard():
     row1 = st.columns(5)
     kpi_card(row1[0], "💰 Faturamento", format_currency(total_valor))
     kpi_card(row1[1], "🚚 Frete Estimado (10%)", format_currency(frete))
-    kpi_card(row1[2], "📉 Taxa Marketplace (ml_fee)", format_currency(taxa_mktplace))
+    kpi_card(row1[2], "📉 Taxa Marketplace", format_currency(taxa_mktplace))
     kpi_card(row1[3], "📦 CMV", format_currency(cmv))
     kpi_card(row1[4], "💵 Margem Operacional", format_currency(margem_operacional))
     
@@ -553,47 +553,56 @@ def mostrar_dashboard():
     import plotly.express as px
 
     # =================== Gráfico de Linha - Total Vendido ===================
-    col_title, col_visao, col_periodo = st.columns([8, 1, 1])
-    title_placeholder = col_title.empty()
+    st.markdown("### 💵 Total Vendido por Período")
     
-    modo_agregacao = col_visao.radio(
-        "Agrupamento",
-        ["Por Conta", "Total Geral"],
-        horizontal=True,
-        key="modo_agregacao"
-    )
+    # Cria colunas horizontais abaixo do título para os seletores
+    col1, col2 = st.columns([2, 2])
     
-    tipo_visualizacao = col_periodo.radio(
-        "Período",
-        ["Diário", "Mensal"],
-        horizontal=True,
-        key="periodo"
-    )
+    with col1:
+        tipo_visualizacao = st.radio(
+            "📆 Período",
+            ["Diário", "Semanal", "Quinzenal", "Mensal"],
+            horizontal=True,
+            key="periodo"
+        )
     
-    # 2) Prepara e agrega os dados
+    with col2:
+        modo_agregacao = st.radio(
+            "👥 Agrupamento",
+            ["Por Conta", "Total Geral"],
+            horizontal=True,
+            key="modo_agregacao"
+        )
+    
+    # Prepara dados
     df_plot = df.copy()
     
-    # agrupa por hora sempre que o período for um único dia
+    # Define o eixo_x com base no tipo de período
     if de == ate:
-        df_plot["date_hour"] = df_plot["date_adjusted"].dt.floor("H")
-        eixo_x = "date_hour"
+        df_plot["date_bucket"] = df_plot["date_adjusted"].dt.floor("H")
         periodo_label = "Hora"
     else:
-        # mais de um dia: usa o seletor Diário/Mensal
         if tipo_visualizacao == "Diário":
-            df_plot["date_adjusted"] = df_plot["date_adjusted"].dt.date
-            eixo_x = "date_adjusted"
+            df_plot["date_bucket"] = df_plot["date_adjusted"].dt.date
             periodo_label = "Dia"
+        elif tipo_visualizacao == "Semanal":
+            df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("W").apply(lambda p: p.start_time.date())
+            periodo_label = "Semana"
+        elif tipo_visualizacao == "Quinzenal":
+            df_plot["quinzena"] = df_plot["date_adjusted"].apply(
+                lambda d: f"{d.year}-Q{(d.month-1)*2//30 + 1}-{1 if d.day <= 15 else 2}"
+            )
+            df_plot["date_bucket"] = df_plot["quinzena"]
+            periodo_label = "Quinzena"
         else:
-            df_plot["date_adjusted"] = df_plot["date_adjusted"].dt.to_period("M").astype(str)
-            eixo_x = "date_adjusted"
+            df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("M").astype(str)
             periodo_label = "Mês"
     
-    # aplica agregação comum
+    # Agrupamento por conta ou total
     if modo_agregacao == "Por Conta":
         vendas_por_data = (
             df_plot
-            .groupby([eixo_x, "nickname"])["total_amount"]
+            .groupby(["date_bucket", "nickname"])["total_amount"]
             .sum()
             .reset_index(name="Valor Total")
         )
@@ -602,38 +611,31 @@ def mostrar_dashboard():
     else:
         vendas_por_data = (
             df_plot
-            .groupby(eixo_x)["total_amount"]
+            .groupby("date_bucket")["total_amount"]
             .sum()
             .reset_index(name="Valor Total")
         )
         color_dim = None
         color_seq = ["#27ae60"]
     
-    titulo = f"💵 Total Vendido por {periodo_label} " + (
-        "(Linha por Conta)" if modo_agregacao=="Por Conta" else "(Soma Total)"
-    )
-    
-    # 3) Atualiza o título
-    title_placeholder.markdown(f"### {titulo}")
-    
-    # 4) Desenha o gráfico
+    # Gráfico final
     fig = px.line(
         vendas_por_data,
-        x=eixo_x,
+        x="date_bucket",
         y="Valor Total",
         color=color_dim,
-        labels={eixo_x: "Data", "Valor Total": "Valor Total", "nickname": "Conta"},
+        labels={"date_bucket": periodo_label, "Valor Total": "Valor Total", "nickname": "Conta"},
         color_discrete_sequence=color_seq,
     )
+    
     fig.update_traces(
         mode="lines+markers",
-        marker=dict(size=5),
-        texttemplate="%{y:,.2f}",
-        textposition="top center"
+        marker=dict(size=5)
     )
-    fig.update_layout(margin=dict(t=30, b=20, l=40, r=10))
+    fig.update_layout(margin=dict(t=20, b=20, l=40, r=10))
     
     st.plotly_chart(fig, use_container_width=True)
+
 
     # === Gráfico de barras: Média por dia da semana ===
     st.markdown('<div class="section-title">📅 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
