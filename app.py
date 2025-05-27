@@ -486,71 +486,69 @@ def mostrar_dashboard():
 
 
     
-    # 4️⃣ Métricas detalhadas
-    
-    # Estilo customizado (CSS)
-    st.markdown("""
-        <style>
-            .kpi-card {
-                background-color: #ffffff;
-                border-left: 6px solid #4CAF50;
-                border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 10px;
-                box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-            }
-            .kpi-title {
-                font-size: 16px;
-                font-weight: bold;
-                margin-bottom: 6px;
-            }
-            .kpi-value {
-                font-size: 20px;
-            }
-        </style>
+# Estilo customizado (CSS)
+st.markdown("""
+    <style>
+        .kpi-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #000000;
+            margin-bottom: 4px;
+        }
+        .kpi-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #000000;
+        }
+        .kpi-card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border-left: 5px solid #27ae60;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Função para renderizar KPI card em coluna
+def kpi_card(col, title, value):
+    col.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-title">{title}</div>
+            <div class="kpi-value">{value}</div>
+        </div>
     """, unsafe_allow_html=True)
-    
-    # Tooltip helper
-    def tooltip(label, tooltip_text):
-        return f"{label} 🛈<span title='{tooltip_text}' style='cursor: help;'>ℹ️</span>"
-    
-    # KPI cards
-    def kpi_card(title, value, tooltip_text=""):
-        st.markdown(f"""
-            <div class="kpi-card">
-                <div class="kpi-title">{tooltip(title, tooltip_text)}</div>
-                <div class="kpi-value">{value}</div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    # Cálculos (ajustado conforme pedido)
-    total_vendas   = len(df)
-    total_valor    = df["total_amount"].sum()
-    total_itens    = df["quantity_sku"].sum()
-    ticket_venda   = total_valor / total_vendas if total_vendas else 0
-    ticket_unidade = total_valor / total_itens if total_itens else 0
-    
-    frete = total_valor * 0.10
-    taxa_mktplace = df["ml_fee"].fillna(0).sum()
-    cmv = (df["quantity_sku"] * df["custo_unitario"].fillna(0)).sum()
-    margem_operacional = total_valor - frete - taxa_mktplace - cmv
-    
-    sem_sku = df["quantity_sku"].isnull().sum()
-    
-    # KPIs visuais
-    st.subheader("💼 Indicadores Financeiros")
-    kpi_card("💰 Faturamento", format_currency(total_valor), "Soma total das vendas finalizadas")
-    kpi_card("🚚 Frete estimado (10%)", format_currency(frete), "Valor médio reservado para frete")
-    kpi_card("📉 Taxa de Marketplace (ml_fee)", format_currency(taxa_mktplace), "Taxas cobradas pela plataforma")
-    kpi_card("📦 CMV", format_currency(cmv), "Custo da Mercadoria Vendida")
-    kpi_card("💵 Margem Operacional", format_currency(margem_operacional), "Lucro bruto após custos diretos")
-    
-    st.subheader("📊 Indicadores de Vendas")
-    kpi_card("🧾 Vendas Realizadas", f"{total_vendas}", "Quantidade de pedidos únicos")
-    kpi_card("📦 Unidades Vendidas (com SKU)", f"{int(total_itens)}", "Total de unidades com SKU")
-    kpi_card("❌ Vendas sem SKU", f"{sem_sku}", "Pedidos com item ainda sem SKU vinculado")
-    kpi_card("🎯 Ticket Médio por Venda", format_currency(ticket_venda), "Valor médio por pedido")
-    kpi_card("🎯 Ticket Médio por Unidade", format_currency(ticket_unidade), "Valor médio por unidade vendida")
+
+# Cálculos (ajustado)
+total_vendas     = len(df)
+total_valor      = df["total_amount"].sum()
+total_itens      = df["quantity_sku"].sum()
+ticket_venda     = total_valor / total_vendas if total_vendas else 0
+ticket_unidade   = total_valor / total_itens if total_itens else 0
+frete            = total_valor * 0.10
+taxa_mktplace    = df["ml_fee"].fillna(0).sum()
+cmv              = (df["quantity_sku"] * df["custo_unitario"].fillna(0)).sum()
+margem_operacional = total_valor - frete - taxa_mktplace - cmv
+sem_sku          = df["quantity_sku"].isnull().sum()
+
+# Bloco 1: Indicadores Financeiros
+st.markdown("### 💼 Indicadores Financeiros")
+row1 = st.columns(5)
+kpi_card(row1[0], "💰 Faturamento", format_currency(total_valor))
+kpi_card(row1[1], "🚚 Frete Estimado (10%)", format_currency(frete))
+kpi_card(row1[2], "📉 Taxa Marketplace (ml_fee)", format_currency(taxa_mktplace))
+kpi_card(row1[3], "📦 CMV", format_currency(cmv))
+kpi_card(row1[4], "💵 Margem Operacional", format_currency(margem_operacional))
+
+# Bloco 2: Indicadores de Vendas
+st.markdown("### 📊 Indicadores de Vendas")
+row2 = st.columns(5)
+kpi_card(row2[0], "🧾 Vendas Realizadas", str(total_vendas))
+kpi_card(row2[1], "📦 Unidades Vendidas", str(int(total_itens)))
+kpi_card(row2[2], "🎯 Ticket Médio por Venda", format_currency(ticket_venda))
+kpi_card(row2[3], "🎯 Ticket Médio por Unidade", format_currency(ticket_unidade))
+kpi_card(row2[4], "❌ Sem SKU Registrado", str(sem_sku))
     
     import plotly.express as px
 
