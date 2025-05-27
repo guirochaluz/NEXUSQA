@@ -301,7 +301,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                     existing_sale = db.query(Sale).filter_by(order_id=oid).first()
                     if existing_sale:
                         old_status = existing_sale.status
-                        nova_venda = _order_to_sale(order, ml_user_id, db)
+                        nova_venda = _order_to_sale(order, ml_user_id, access_token, db)
                         for attr, value in nova_venda.__dict__.items():
                             if attr != "_sa_instance_state":
                                 setattr(existing_sale, attr, value)
