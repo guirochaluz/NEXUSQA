@@ -174,7 +174,7 @@ def sync_all_accounts() -> int:
     print(f"📂️ Sincronização completa. Total de vendas importadas: {total}")
     return total
 
-def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = None) -> Sale:
+def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional[SessionLocal] = None) -> Sale:
     internal_session = False
     if db is None:
         db = SessionLocal()
@@ -204,12 +204,23 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
 
             if sku_info:
                 quantity_sku, custo_unitario, level1, level2 = sku_info
-
     finally:
         if internal_session:
             db.close()
 
+    # 🔎 Busca marketplace_fee via /payments/{id}
     payment_info = (order.get("payments") or [{}])[0]
+    payment_id = payment_info.get("id")
+    marketplace_fee = None
+
+    if payment_id:
+        try:
+            resp = requests.get(f"https://api.mercadolibre.com/payments/{payment_id}", headers={"Authorization": f"Bearer {access_token}"})
+            if resp.ok:
+                payment_data = resp.json()
+                marketplace_fee = payment_data.get("marketplace_fee")
+        except Exception as e:
+            print(f"⚠️ Erro ao buscar marketplace_fee para payment {payment_id}: {e}")
 
     return Sale(
         order_id         = str(order["id"]),
@@ -233,9 +244,11 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         level1           = level1,
         level2           = level2,
 
-        # Preenchimento da coluna existente ml_fee com marketplace_fee
-        ml_fee           = payment_info.get("marketplace_fee"),
+        # Novo preenchimento com marketplace_fee
+        ml_fee           = marketplace_fee,
+        payment_id       = payment_id,
     )
+
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     from datetime import datetime, timedelta
