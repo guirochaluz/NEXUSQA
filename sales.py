@@ -186,27 +186,21 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
     ship     = order.get("shipping") or {}
     addr     = ship.get("receiver_address") or {}
 
-    item_id = item_inf.get("id")
-    sku = None
+    seller_sku = item_inf.get("seller_sku")
     quantity_sku = None
     custo_unitario = None
     level1 = None
     level2 = None
 
     try:
-        sku_result = db.execute(text("""
-            SELECT sku FROM skumlb WHERE mlb = :mlb LIMIT 1
-        """), {"mlb": item_id}).scalar()
-
-        if sku_result:
-            sku = sku_result
+        if seller_sku:
             sku_info = db.execute(text("""
                 SELECT quantity, custo_unitario, level1, level2
                 FROM sku
                 WHERE sku = :sku
                 ORDER BY date_created DESC
                 LIMIT 1
-            """), {"sku": sku}).fetchone()
+            """), {"sku": seller_sku}).fetchone()
 
             if sku_info:
                 quantity_sku, custo_unitario, level1, level2 = sku_info
@@ -227,7 +221,7 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         status           = order.get("status"),
         status_detail    = order.get("status_detail"),
         date_closed      = parser.isoparse(order.get("date_closed")),
-        item_id          = item_id,
+        item_id          = item_inf.get("id"),
         item_title       = item_inf.get("title"),
         quantity         = item.get("quantity"),
         unit_price       = item.get("unit_price"),
@@ -239,13 +233,14 @@ def _order_to_sale(order: dict, ml_user_id: str, db: Optional[SessionLocal] = No
         zip_code         = addr.get("zip_code"),
         street_name      = addr.get("street_name"),
         street_number    = addr.get("street_number"),
-        sku              = sku,
+
+        # Campos vindos da tabela sku
+        seller_sku       = seller_sku,
         quantity_sku     = quantity_sku,
         custo_unitario   = custo_unitario,
         level1           = level1,
         level2           = level2
     )
-
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
@@ -320,20 +315,6 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
 
     return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
 
-def atualizar_sales_com_sku(engine):
-    with engine.begin() as conn:
-        conn.execute(text("""
-            UPDATE sales
-            SET
-                sku = s.sku,
-                quantity_sku = s.quantity,
-                custo_unitario = s.custo_unitario,
-                level1 = s.level1,
-                level2 = s.level2
-            FROM skumlb m
-            JOIN sku s ON s.sku = m.sku
-            WHERE sales.item_id = m.mlb;
-        """))
 
 def padronizar_status_sales(engine):
     """
