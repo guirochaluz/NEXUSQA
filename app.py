@@ -184,6 +184,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.buyer_nickname,
                    s.seller_sku,
                    s.custo_unitario,
+                   s.quantity_sku,
                    s.level1,
                    s.level2,
                    u.nickname
@@ -207,6 +208,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.buyer_nickname,
                    s.seller_sku,
                    s.custo_unitario,
+                   s.quantity_sku,
                    s.level1,
                    s.level2,
                    u.nickname
@@ -216,6 +218,7 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
         df = pd.read_sql(sql, engine)
 
     return df
+
 
 
 # ----------------- Componentes de Interface -----------------
