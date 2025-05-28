@@ -184,6 +184,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
     from db import SessionLocal
     from sqlalchemy import text
     from dateutil import parser
+    import requests
 
     internal_session = False
     if db is None:
@@ -191,6 +192,19 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         internal_session = True
 
     try:
+        # 🔄 Se payments não está presente, buscar a ordem completa
+        if "payments" not in order or not order["payments"]:
+            order_id = order.get("id")
+            try:
+                resp = requests.get(
+                    f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}"
+                )
+                resp.raise_for_status()
+                order = resp.json()
+                print(f"✅ Order {order_id} complementada com dados completos")
+            except Exception as e:
+                print(f"⚠️ Erro ao complementar order {order_id}: {e}")
+
         buyer = order.get("buyer", {}) or {}
         item = (order.get("order_items") or [{}])[0]
         item_inf = item.get("item", {}) or {}
@@ -248,6 +262,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
     finally:
         if internal_session:
             db.close()
+
 
 
 
