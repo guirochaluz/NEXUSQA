@@ -180,6 +180,20 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         db = SessionLocal()
         internal_session = True
 
+    try:
+        # 🔄 Se payments não está presente, buscar a ordem completa
+        if "payments" not in order or not order["payments"]:
+            order_id = order.get("id")
+            resp = requests.get(
+                f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}"
+            )
+            if resp.ok:
+                order = resp.json()
+            else:
+                print(f"⚠️ Falha ao buscar dados completos da ordem {order_id}: {resp.status_code}")
+    except Exception as e:
+        print(f"⚠️ Erro ao tentar complementar dados da ordem {order.get('id')}: {e}")
+
     buyer    = order.get("buyer", {}) or {}
     item     = (order.get("order_items") or [{}])[0]
     item_inf = item.get("item", {}) or {}
@@ -208,19 +222,10 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         if internal_session:
             db.close()
 
-    # 🔎 Busca marketplace_fee via /payments/{id}
+    # 🔎 marketplace_fee direto de payments
     payment_info = (order.get("payments") or [{}])[0]
     payment_id = payment_info.get("id")
-    marketplace_fee = None
-
-    if payment_id:
-        try:
-            resp = requests.get(f"https://api.mercadolibre.com/payments/{payment_id}", headers={"Authorization": f"Bearer {access_token}"})
-            if resp.ok:
-                payment_data = resp.json()
-                marketplace_fee = payment_data.get("marketplace_fee")
-        except Exception as e:
-            print(f"⚠️ Erro ao buscar marketplace_fee para payment {payment_id}: {e}")
+    marketplace_fee = payment_info.get("marketplace_fee")
 
     return Sale(
         order_id         = str(order["id"]),
@@ -237,16 +242,17 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         shipping_id      = ship.get("id"),
         seller_sku       = seller_sku,
 
-        # Campos da tabela sku
+        # Dados complementares do SKU
         quantity_sku     = quantity_sku,
         custo_unitario   = custo_unitario,
         level1           = level1,
         level2           = level2,
 
-        # Novo preenchimento com marketplace_fee
+        # Taxa real do marketplace
         ml_fee           = marketplace_fee,
         payment_id       = payment_id,
     )
+
 
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
