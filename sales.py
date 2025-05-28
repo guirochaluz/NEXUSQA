@@ -211,18 +211,35 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         internal_session = True
 
     try:
-        # 🔄 Se payments não está presente, buscar a ordem completa
-        if "payments" not in order or not order["payments"]:
-            order_id = order.get("id")
+        order_id = order.get("id")
+
+        # 🔄 Sempre força buscar dados completos da ordem
+        try:
+            resp = requests.get(
+                f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}"
+            )
+            resp.raise_for_status()
+            order = resp.json()
+            print(f"✅ Order {order_id} complementada com dados completos")
+        except Exception as e:
+            print(f"⚠️ Erro ao complementar order {order_id}: {e}")
+
+        # 🔍 Busca payments direto, caso ainda esteja ausente
+        payments = order.get("payments")
+        if not payments:
             try:
-                resp = requests.get(
-                    f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}"
+                pay_resp = requests.get(
+                    f"https://api.mercadolibre.com/orders/{order_id}/payments?access_token={access_token}"
                 )
-                resp.raise_for_status()
-                order = resp.json()
-                print(f"✅ Order {order_id} complementada com dados completos")
+                pay_resp.raise_for_status()
+                payments = pay_resp.json()
+                if isinstance(payments, list) and payments:
+                    print(f"✅ Payments recuperados separadamente para {order_id}")
+                    order["payments"] = payments
+                else:
+                    print(f"⚠️ Nenhum payment encontrado em fallback para {order_id}")
             except Exception as e:
-                print(f"⚠️ Erro ao complementar order {order_id}: {e}")
+                print(f"❌ Erro ao buscar payments separadamente: {e}")
 
         buyer = order.get("buyer", {}) or {}
         item = (order.get("order_items") or [{}])[0]
@@ -251,6 +268,8 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         payment_info = (order.get("payments") or [{}])[0]
         payment_id = payment_info.get("id")
         marketplace_fee = payment_info.get("marketplace_fee")
+
+        print(f"📦 Finalizando order {order_id} | ml_fee: {marketplace_fee}")
 
         return Sale(
             order_id         = str(order.get("id")),
@@ -281,10 +300,6 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
     finally:
         if internal_session:
             db.close()
-
-
-
-
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     from datetime import datetime, timedelta
