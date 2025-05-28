@@ -21,6 +21,11 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
     from sales import _order_to_sale
+    from dateutil.tz import tzutc
+    from models import Sale
+    from sqlalchemy import func
+    from db import SessionLocal
+    import requests
 
     db = SessionLocal()
     total_saved = 0
@@ -63,9 +68,15 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
                     if db.query(Sale).filter_by(order_id=order_id).first():
                         continue
                     try:
-                        sale = _order_to_sale(order, ml_user_id, access_token, db)
-                        db.add(sale)
-                        total_saved += 1
+                        # 🔄 Busca completa da ordem para garantir todos os campos (especialmente payments)
+                        full_resp = requests.get(f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}")
+                        if full_resp.ok:
+                            full_order = full_resp.json()
+                            sale = _order_to_sale(full_order, ml_user_id, access_token, db)
+                            db.add(sale)
+                            total_saved += 1
+                        else:
+                            print(f"⚠️ Falha ao buscar ordem completa {order_id}: {full_resp.status_code}")
                     except Exception as e:
                         print(f"Erro ao processar venda {order_id}: {e}")
 
@@ -87,6 +98,7 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     total_saved = 0
 
     try:
+        # 🔁 Tenta renovar token no início
         try:
             r = requests.post(f"{BACKEND_URL}/auth/refresh", json={"user_id": ml_user_id})
             r.raise_for_status()
@@ -143,8 +155,14 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
             oid = str(o["id"])
             existing_sale = db.query(Sale).filter_by(order_id=oid).first()
             if not existing_sale:
-                db.add(_order_to_sale(o, ml_user_id, access_token, db))
-                total_saved += 1
+                # 🔍 Força buscar ordem completa para garantir ml_fee
+                full_resp = requests.get(f"https://api.mercadolibre.com/orders/{oid}?access_token={access_token}")
+                if full_resp.ok:
+                    full_order = full_resp.json()
+                    db.add(_order_to_sale(full_order, ml_user_id, access_token, db))
+                    total_saved += 1
+                else:
+                    print(f"⚠️ Falha ao buscar ordem completa {oid}: {full_resp.status_code}")
             else:
                 novo_status = o.get("status", "").lower()
                 if novo_status and existing_sale.status != novo_status:
@@ -161,52 +179,29 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
 
     return total_saved
 
-def sync_all_accounts() -> int:
-    db = SessionLocal()
-    total = 0
-    try:
-        rows = db.execute(text("SELECT ml_user_id, access_token FROM user_tokens")).fetchall()
-        for ml_user_id, access_token in rows:
-            total += get_incremental_sales(str(ml_user_id), access_token)
-    finally:
-        db.close()
-
-    print(f"📂️ Sincronização completa. Total de vendas importadas: {total}")
-    return total
-
 def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional[SessionLocal] = None) -> Sale:
+    from models import Sale
+    from db import SessionLocal
+    from sqlalchemy import text
+    from dateutil import parser
+
     internal_session = False
     if db is None:
         db = SessionLocal()
         internal_session = True
 
     try:
-        # 🔄 Se payments não está presente, buscar a ordem completa
-        if "payments" not in order or not order["payments"]:
-            order_id = order.get("id")
-            resp = requests.get(
-                f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}"
-            )
-            if resp.ok:
-                order = resp.json()
-            else:
-                print(f"⚠️ Falha ao buscar dados completos da ordem {order_id}: {resp.status_code}")
-    except Exception as e:
-        print(f"⚠️ Erro ao tentar complementar dados da ordem {order.get('id')}: {e}")
+        buyer = order.get("buyer", {}) or {}
+        item = (order.get("order_items") or [{}])[0]
+        item_inf = item.get("item", {}) or {}
+        ship = order.get("shipping") or {}
 
-    buyer    = order.get("buyer", {}) or {}
-    item     = (order.get("order_items") or [{}])[0]
-    item_inf = item.get("item", {}) or {}
-    ship     = order.get("shipping") or {}
-    addr     = ship.get("receiver_address") or {}
+        seller_sku = item_inf.get("seller_sku")
+        quantity_sku = None
+        custo_unitario = None
+        level1 = None
+        level2 = None
 
-    seller_sku = item_inf.get("seller_sku")
-    quantity_sku = None
-    custo_unitario = None
-    level1 = None
-    level2 = None
-
-    try:
         if seller_sku:
             sku_info = db.execute(text("""
                 SELECT quantity, custo_unitario, level1, level2
@@ -218,40 +213,42 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
 
             if sku_info:
                 quantity_sku, custo_unitario, level1, level2 = sku_info
+
+        # 🔎 marketplace_fee direto de payments
+        payment_info = (order.get("payments") or [{}])[0]
+        payment_id = payment_info.get("id")
+        marketplace_fee = payment_info.get("marketplace_fee")
+
+        return Sale(
+            order_id         = str(order.get("id")),
+            ml_user_id       = int(ml_user_id),
+            buyer_id         = buyer.get("id"),
+            buyer_nickname   = buyer.get("nickname"),
+            total_amount     = order.get("total_amount"),
+            status           = order.get("status"),
+            date_closed      = parser.isoparse(order.get("date_closed")),
+            item_id          = item_inf.get("id"),
+            item_title       = item_inf.get("title"),
+            quantity         = item.get("quantity"),
+            unit_price       = item.get("unit_price"),
+            shipping_id      = ship.get("id"),
+            seller_sku       = seller_sku,
+
+            # Dados complementares do SKU
+            quantity_sku     = quantity_sku,
+            custo_unitario   = custo_unitario,
+            level1           = level1,
+            level2           = level2,
+
+            # Taxa real do marketplace
+            ml_fee           = marketplace_fee,
+            payment_id       = payment_id,
+        )
+
     finally:
         if internal_session:
             db.close()
 
-    # 🔎 marketplace_fee direto de payments
-    payment_info = (order.get("payments") or [{}])[0]
-    payment_id = payment_info.get("id")
-    marketplace_fee = payment_info.get("marketplace_fee")
-
-    return Sale(
-        order_id         = str(order["id"]),
-        ml_user_id       = int(ml_user_id),
-        buyer_id         = buyer.get("id"),
-        buyer_nickname   = buyer.get("nickname"),
-        total_amount     = order.get("total_amount"),
-        status           = order.get("status"),
-        date_closed      = parser.isoparse(order.get("date_closed")),
-        item_id          = item_inf.get("id"),
-        item_title       = item_inf.get("title"),
-        quantity         = item.get("quantity"),
-        unit_price       = item.get("unit_price"),
-        shipping_id      = ship.get("id"),
-        seller_sku       = seller_sku,
-
-        # Dados complementares do SKU
-        quantity_sku     = quantity_sku,
-        custo_unitario   = custo_unitario,
-        level1           = level1,
-        level2           = level2,
-
-        # Taxa real do marketplace
-        ml_fee           = marketplace_fee,
-        payment_id       = payment_id,
-    )
 
 
 
@@ -306,13 +303,23 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                     existing_sale = db.query(Sale).filter_by(order_id=oid).first()
                     if existing_sale:
                         old_status = existing_sale.status
-                        nova_venda = _order_to_sale(order, ml_user_id, access_token, db)
-                        for attr, value in nova_venda.__dict__.items():
-                            if attr != "_sa_instance_state":
-                                setattr(existing_sale, attr, value)
-                        if return_changes and old_status != nova_venda.status:
-                            alteracoes.append((oid, old_status, nova_venda.status))
-                        atualizadas += 1
+
+                        # 🔄 Sempre buscar dados completos da ordem
+                        full_resp = requests.get(f"https://api.mercadolibre.com/orders/{oid}?access_token={access_token}")
+                        if full_resp.ok:
+                            full_order = full_resp.json()
+                            nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+
+                            for attr, value in nova_venda.__dict__.items():
+                                if attr != "_sa_instance_state":
+                                    setattr(existing_sale, attr, value)
+
+                            if return_changes and old_status != nova_venda.status:
+                                alteracoes.append((oid, old_status, nova_venda.status))
+                            atualizadas += 1
+                        else:
+                            print(f"⚠️ Falha ao buscar ordem completa {oid}: {full_resp.status_code}")
+
                 db.commit()
 
                 if len(orders) < 50:
@@ -328,6 +335,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
         db.close()
 
     return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
+
 
 
 def padronizar_status_sales(engine):
