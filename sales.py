@@ -23,7 +23,7 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
     from sales import _order_to_sale
     from dateutil.tz import tzutc
     from models import Sale
-    from sqlalchemy import func
+    from sqlalchemy import func, text
     from db import SessionLocal
     import requests
 
@@ -65,33 +65,45 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
 
                 for order in orders:
                     order_id = str(order["id"])
-                    if db.query(Sale).filter_by(order_id=order_id).first():
-                        continue
                     try:
-                        # 🔄 Busca completa da ordem para garantir todos os campos (especialmente payments)
                         full_resp = requests.get(f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}")
-                        if full_resp.ok:
-                            full_order = full_resp.json()
-                            sale = _order_to_sale(full_order, ml_user_id, access_token, db)
-                            db.add(sale)
+                        if not full_resp.ok:
+                            print(f"⚠️ Falha ao buscar ordem completa {order_id}: {full_resp.status_code}")
+                            continue
+
+                        full_order = full_resp.json()
+                        nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+                        print(f"✅ FULL - ordem {order_id} processada | ml_fee: {nova_venda.ml_fee}")
+
+                        existing_sale = db.query(Sale).filter_by(order_id=order_id).first()
+                        if not existing_sale:
+                            db.add(nova_venda)
                             total_saved += 1
                         else:
-                            print(f"⚠️ Falha ao buscar ordem completa {order_id}: {full_resp.status_code}")
+                            for attr, value in nova_venda.__dict__.items():
+                                if attr != "_sa_instance_state":
+                                    setattr(existing_sale, attr, value)
+                            total_saved += 1  # considera também atualizações
+
                     except Exception as e:
-                        print(f"Erro ao processar venda {order_id}: {e}")
+                        print(f"❌ Erro ao processar venda {order_id}: {e}")
 
                 db.commit()
                 if len(orders) < FULL_PAGE_SIZE:
                     break
                 offset += FULL_PAGE_SIZE
+
             current_start += relativedelta(months=1)
+
     except Exception as e:
         db.rollback()
         raise RuntimeError(f"Erro ao importar vendas por intervalo: {e}")
+
     finally:
         db.close()
 
     return total_saved
+
 
 def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     db = SessionLocal()
@@ -154,30 +166,37 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
         for o in orders:
             oid = str(o["id"])
             existing_sale = db.query(Sale).filter_by(order_id=oid).first()
+
+            # 🔍 Busca a versão completa da ordem SEMPRE
+            full_resp = requests.get(f"https://api.mercadolibre.com/orders/{oid}?access_token={access_token}")
+            if not full_resp.ok:
+                print(f"⚠️ Falha ao buscar ordem completa {oid}: {full_resp.status_code}")
+                continue
+
+            full_order = full_resp.json()
+            nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+            print(f"✅ Incremental - ordem {oid} processada | ml_fee: {nova_venda.ml_fee}")
+
             if not existing_sale:
-                # 🔍 Força buscar ordem completa para garantir ml_fee
-                full_resp = requests.get(f"https://api.mercadolibre.com/orders/{oid}?access_token={access_token}")
-                if full_resp.ok:
-                    full_order = full_resp.json()
-                    db.add(_order_to_sale(full_order, ml_user_id, access_token, db))
-                    total_saved += 1
-                else:
-                    print(f"⚠️ Falha ao buscar ordem completa {oid}: {full_resp.status_code}")
+                db.add(nova_venda)
+                total_saved += 1
             else:
-                novo_status = o.get("status", "").lower()
-                if novo_status and existing_sale.status != novo_status:
-                    existing_sale.status = novo_status
+                # 🧠 Atualiza todos os campos
+                for attr, value in nova_venda.__dict__.items():
+                    if attr != "_sa_instance_state":
+                        setattr(existing_sale, attr, value)
 
         db.commit()
 
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise
+        raise RuntimeError(f"Erro no incremental: {e}")
 
     finally:
         db.close()
 
     return total_saved
+
 
 def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional[SessionLocal] = None) -> Sale:
     from models import Sale
@@ -276,9 +295,9 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     from sales import _order_to_sale
     import requests
     from sqlalchemy import func
+
     print(f"🔁 Iniciando revisão para usuário: {ml_user_id}")
 
-    
     db = SessionLocal()
     atualizadas = 0
     alteracoes = []
@@ -288,6 +307,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
         data_max = db.query(func.max(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
 
         if not data_min or not data_max:
+            print("⚠️ Nenhuma venda encontrada para revisar.")
             return atualizadas, alteracoes
 
         if data_min.tzinfo is None:
@@ -298,7 +318,9 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
         current_start = data_min.replace(day=1)
         while current_start <= data_max:
             current_end = (current_start + relativedelta(months=1)) - timedelta(seconds=1)
+            print(f"📅 Revisando de {current_start.date()} até {current_end.date()}")
             offset = 0
+
             while offset < 10000:
                 params = {
                     "seller": ml_user_id,
@@ -309,24 +331,30 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                     "order.date_closed.to": current_end.isoformat()
                 }
                 headers = {"Authorization": f"Bearer {access_token}"}
+
                 resp = requests.get("https://api.mercadolibre.com/orders/search", headers=headers, params=params)
-                resp.raise_for_status()
+                if not resp.ok:
+                    print(f"❌ Falha ao buscar lista de orders (offset {offset}): {resp.status_code}")
+                    break
+
                 orders = resp.json().get("results", [])
                 if not orders:
+                    print("⛔ Nenhuma venda nesse intervalo.")
                     break
 
                 for order in orders:
                     oid = str(order["id"])
                     existing_sale = db.query(Sale).filter_by(order_id=oid).first()
+
                     if existing_sale:
                         old_status = existing_sale.status
 
-                        # 🔄 Sempre buscar dados completos da ordem
+                        # 🔍 Buscar dados completos da ordem
                         full_resp = requests.get(f"https://api.mercadolibre.com/orders/{oid}?access_token={access_token}")
                         if full_resp.ok:
                             full_order = full_resp.json()
                             nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
-                            print(f"✅ Ordem {oid} atualizada - ml_fee: {nova_venda.ml_fee}")
+                            print(f"🔄 Atualizando ordem {oid} | status: {old_status} → {nova_venda.status} | ml_fee: {nova_venda.ml_fee}")
 
                             for attr, value in nova_venda.__dict__.items():
                                 if attr != "_sa_instance_state":
@@ -343,15 +371,17 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                 if len(orders) < 50:
                     break
                 offset += 50
+
             current_start += relativedelta(months=1)
 
     except Exception as e:
         db.rollback()
-        raise RuntimeError(f"Erro ao revisar histórico: {e}")
+        raise RuntimeError(f"❌ Erro ao revisar histórico: {e}")
 
     finally:
         db.close()
 
+    print(f"✅ Revisão finalizada: {atualizadas} ordens atualizadas.")
     return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
 
 
