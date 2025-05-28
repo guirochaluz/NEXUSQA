@@ -390,21 +390,56 @@ def mostrar_dashboard():
     """, unsafe_allow_html=True)
     
     st.markdown("**🧾 Contas Mercado Livre:**")
+
+    st.markdown("""
+        <style>
+            /* Cor de fundo do checkbox quando marcado */
+            [data-testid="stCheckbox"] input:checked + div > div {
+                background-color: #27ae60 !important;  /* verde */
+                border-color: #27ae60 !important;
+            }
     
+            /* Cor do check (✓) branco */
+            [data-testid="stCheckbox"] input:checked + div > div:after {
+                color: white !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
     # Estado para controlar se todas estão selecionadas
     if "todas_contas_marcadas" not in st.session_state:
         st.session_state["todas_contas_marcadas"] = True
     
-    # Botão alternar seleção
+    # Botão alternar seleção (HTML estilizado com form funcional)
     col_btn, _ = st.columns([1, 7])
     with col_btn:
         label = "✅ Selecionar Todos" if not st.session_state["todas_contas_marcadas"] else "❌ Desmarcar Todos"
-        st.markdown(
-            f"<button class='mini-toggle-button'>{label}</button>",
-            unsafe_allow_html=True
-        )
-        if st.button(" ", key="alternar_todas", help="Alternar seleção de todas as contas"):
-            st.session_state["todas_contas_marcadas"] = not st.session_state["todas_contas_marcadas"]
+    
+        with st.form("form_toggle_todas"):
+            st.markdown(
+                f"""
+                <style>
+                    .mini-toggle-button {{
+                        background-color: transparent;
+                        color: #999;
+                        border: 1px solid #444;
+                        padding: 2px 8px;
+                        font-size: 12px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        margin-bottom: 4px;
+                    }}
+                </style>
+                <button type="submit" class="mini-toggle-button">{label}</button>
+                """,
+                unsafe_allow_html=True
+            )
+            submitted = st.form_submit_button(" ", use_container_width=True)
+            if submitted:
+                st.session_state["todas_contas_marcadas"] = not st.session_state["todas_contas_marcadas"]
+                # Resetar os checkboxes com o novo valor
+                for conta in contas_lst:
+                    st.session_state[f"conta_{conta}"] = st.session_state["todas_contas_marcadas"]
     
     # Renderiza os checkboxes em colunas
     colunas_contas = st.columns(8)
@@ -412,13 +447,15 @@ def mostrar_dashboard():
     
     for i, conta in enumerate(contas_lst):
         key = f"conta_{conta}"
-        default = st.session_state["todas_contas_marcadas"]
-        if colunas_contas[i % 8].checkbox(conta, value=default, key=key):
+        if key not in st.session_state:
+            st.session_state[key] = st.session_state["todas_contas_marcadas"]
+        if colunas_contas[i % 8].checkbox(conta, key=key):
             selecionadas.append(conta)
     
     # Aplica filtro
     if selecionadas:
         df_full = df_full[df_full["nickname"].isin(selecionadas)]
+
 
 
 
