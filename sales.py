@@ -475,3 +475,101 @@ def sync_all_accounts() -> int:
         db.close()
 
     return total
+
+def get_full_sales(ml_user_id: str, access_token: str) -> int:
+    from datetime import datetime, timedelta
+    from dateutil.relativedelta import relativedelta
+    from dateutil.tz import tzutc
+    from sales import _order_to_sale
+    from db import SessionLocal
+    from models import Sale
+    from sqlalchemy import func
+    import requests
+
+    API_BASE = "https://api.mercadolibre.com/orders/search"
+    FULL_PAGE_SIZE = 50
+
+    db = SessionLocal()
+    total_saved = 0
+
+    try:
+        # Determina o intervalo de datas com base nas vendas registradas
+        data_min = db.query(func.min(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
+        data_max = db.query(func.max(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
+
+        if not data_min or not data_max:
+            data_max = datetime.utcnow().replace(tzinfo=tzutc())
+            data_min = data_max - relativedelta(years=1)
+
+        if data_min.tzinfo is None:
+            data_min = data_min.replace(tzinfo=tzutc())
+        if data_max.tzinfo is None:
+            data_max = data_max.replace(tzinfo=tzutc())
+
+        current_start = data_min.replace(day=1)
+
+        while current_start <= data_max:
+            current_end = (current_start + relativedelta(months=1)) - timedelta(seconds=1)
+            offset = 0
+
+            while True:
+                params = {
+                    "seller": ml_user_id,
+                    "offset": offset,
+                    "limit": FULL_PAGE_SIZE,
+                    "sort": "date_asc",
+                    "order.date_closed.from": current_start.isoformat(),
+                    "order.date_closed.to": current_end.isoformat()
+                }
+                headers = {"Authorization": f"Bearer {access_token}"}
+
+                resp = requests.get(API_BASE, params=params, headers=headers)
+                if not resp.ok:
+                    print(f"❌ Falha ao buscar pedidos no intervalo {current_start.date()} - {current_end.date()} (offset {offset}): {resp.status_code}")
+                    break
+
+                orders = resp.json().get("results", [])
+                if not orders:
+                    break
+
+                for order in orders:
+                    order_id = str(order["id"])
+                    try:
+                        full_resp = requests.get(f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}")
+                        if not full_resp.ok:
+                            print(f"⚠️ Falha ao buscar ordem completa {order_id}: {full_resp.status_code}")
+                            continue
+
+                        full_order = full_resp.json()
+                        nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+                        print(f"📦 FULL - ordem {order_id} processada | ml_fee: {nova_venda.ml_fee}")
+
+                        existing_sale = db.query(Sale).filter_by(order_id=order_id).first()
+                        if not existing_sale:
+                            db.add(nova_venda)
+                        else:
+                            for attr, value in nova_venda.__dict__.items():
+                                if attr != "_sa_instance_state":
+                                    setattr(existing_sale, attr, value)
+
+                        total_saved += 1
+
+                    except Exception as e:
+                        print(f"❌ Erro ao processar venda {order_id}: {e}")
+
+                db.commit()
+
+                if len(orders) < FULL_PAGE_SIZE:
+                    break
+
+                offset += FULL_PAGE_SIZE
+
+            current_start += relativedelta(months=1)
+
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Erro ao importar vendas por intervalo: {e}")
+    finally:
+        db.close()
+
+    return total_saved
