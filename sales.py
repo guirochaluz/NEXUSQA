@@ -421,3 +421,20 @@ def padronizar_status_sales(engine):
             SET status = 'Cancelado'
             WHERE status != 'Pago'
         """))
+
+def sync_all_accounts() -> int:
+    db = SessionLocal()
+    total = 0
+    try:
+        rows = db.execute(text("SELECT ml_user_id, access_token FROM user_tokens")).fetchall()
+        for ml_user_id, access_token in rows:
+            try:
+                total += get_incremental_sales(str(ml_user_id), access_token)
+            except Exception as e:
+                print(f"❌ Erro ao sincronizar usuário {ml_user_id}: {e}")
+    finally:
+        db.close()
+
+    print(f"📂️ Sincronização completa. Total de vendas importadas: {total}")
+    return total
+
