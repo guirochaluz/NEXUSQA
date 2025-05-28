@@ -261,7 +261,9 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     from sales import _order_to_sale
     import requests
     from sqlalchemy import func
+    print(f"🔁 Iniciando revisão para usuário: {ml_user_id}")
 
+    
     db = SessionLocal()
     atualizadas = 0
     alteracoes = []
@@ -309,6 +311,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                         if full_resp.ok:
                             full_order = full_resp.json()
                             nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+                            print(f"✅ Ordem {oid} atualizada - ml_fee: {nova_venda.ml_fee}")
 
                             for attr, value in nova_venda.__dict__.items():
                                 if attr != "_sa_instance_state":
