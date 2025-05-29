@@ -46,6 +46,8 @@ from sklearn.cluster import KMeans
 from textblob import TextBlob
 import io
 from datetime import datetime, timedelta
+from utils import engine, DATA_INICIO, buscar_ml_fee
+
 
 
 # 4) Configuração de locale
