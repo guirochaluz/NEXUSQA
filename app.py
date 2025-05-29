@@ -1111,53 +1111,52 @@ def mostrar_relatorios():
 def mostrar_gestao_sku():
     st.header("📦 Gestão de SKU")
 
-    # 🔄 Botão de atualização total (atualiza banco + recarrega dados)
-    if st.button("🔄 Atualizar Dados"):
-        atualizar_sales_com_sku(engine)
+    # 🔄 Botão de atualização (apenas recarrega os dados do banco)
+    if st.button("🔄 Recarregar Dados"):
         st.session_state["atualizar_gestao_sku"] = True
 
-    # 🔁 Recarrega os dados do banco se necessário
+    # Carrega os dados da base
     if st.session_state.get("atualizar_gestao_sku", False) or "df_gestao_sku" not in st.session_state:
         df = pd.read_sql(text("""
-            SELECT s.item_id, s.seller_sku, s.level1, s.level2, s.custo_unitario, s.quantity_sku
-            FROM sales s
-            ORDER BY s.date_closed DESC
+            SELECT DISTINCT ON (item_id)
+                item_id, seller_sku, level1, level2, custo_unitario, quantity_sku
+            FROM sales
+            ORDER BY item_id, date_closed DESC
         """), engine)
         st.session_state["df_gestao_sku"] = df
         st.session_state["atualizar_gestao_sku"] = False
     else:
         df = st.session_state["df_gestao_sku"]
 
-    # 1️⃣ Métricas principais
+    # 🔢 Métricas
     with engine.begin() as conn:
-        total_com_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE seller_sku IS NOT NULL")).scalar()
-        total_sem_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE seller_sku IS NULL")).scalar()
-        total_sem_preco = conn.execute(text("""
-            SELECT COUNT(*) FROM sales
-            WHERE seller_sku IS NOT NULL AND custo_unitario IS NULL
+        vendas_sem_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE seller_sku IS NULL")).scalar()
+        mlbs_sem_sku = conn.execute(text("SELECT COUNT(DISTINCT item_id) FROM sales WHERE seller_sku IS NULL")).scalar()
+        sku_incompleto = conn.execute(text("""
+            SELECT COUNT(DISTINCT seller_sku)
+            FROM sales
+            WHERE seller_sku IS NOT NULL AND (
+                level1 IS NULL OR level2 IS NULL OR custo_unitario IS NULL OR quantity_sku IS NULL
+            )
         """)).scalar()
-        mlb_com_sku = conn.execute(text("SELECT COUNT(DISTINCT item_id) FROM sales WHERE seller_sku IS NOT NULL")).scalar()
-        mlb_sem_sku = conn.execute(text("SELECT COUNT(DISTINCT item_id) FROM sales WHERE seller_sku IS NULL")).scalar()
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("🔗 Vendas com SKU", total_com_sku)
-    col2.metric("🚫 Vendas sem SKU", total_sem_sku)
-    col3.metric("❌ SKUs sem Preço", total_sem_preco)
-    col4.metric("📦 MLBs com SKU", mlb_com_sku)
-    col5.metric("📦 MLBs sem SKU", mlb_sem_sku)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🚫 Vendas sem SKU", vendas_sem_sku)
+    col2.metric("📦 MLBs sem SKU", mlbs_sem_sku)
+    col3.metric("⚠️ SKUs com Cadastro Incompleto", sku_incompleto)
 
     st.markdown("---")
     st.markdown("### 🔍 Filtros de Diagnóstico")
 
-
-    # 3️⃣ Filtros dinâmicos
+    # Filtros
     colf1, colf2, colf3, colf4, colf5 = st.columns([1.2, 1.2, 1.2, 1.2, 2])
     op_sku     = colf1.selectbox("Seller SKU", ["Todos", "Nulo", "Não Nulo"])
     op_level1  = colf2.selectbox("Level1", ["Todos", "Nulo", "Não Nulo"])
     op_level2  = colf3.selectbox("Level2", ["Todos", "Nulo", "Não Nulo"])
     op_preco   = colf4.selectbox("Preço Unitário", ["Todos", "Nulo", "Não Nulo"])
     filtro_txt = colf5.text_input("🔎 Pesquisa (MLB, Seller SKU, Level1, Level2)")
-    
+
+    # Aplicar filtros
     if op_sku == "Nulo":
         df = df[df["seller_sku"].isna()]
     elif op_sku == "Não Nulo":
@@ -1180,9 +1179,9 @@ def mostrar_gestao_sku():
                          or filtro_txt in str(row["seller_sku"]).lower()
                          or filtro_txt in str(row["level1"]).lower()
                          or filtro_txt in str(row["level2"]).lower(), axis=1)]
-    
-    # 4️⃣ Tabela de visualização
-    st.markdown("### 📊 Tabela de Vendas com SKUs")
+
+    # Tabela
+    st.markdown("### 📊 Diagnóstico de Cadastro de SKU por Produto (MLB)")
     if df.empty:
         st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
     else:
