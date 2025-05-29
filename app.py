@@ -564,109 +564,109 @@ def mostrar_dashboard():
     
     import plotly.express as px
 
-# =================== Gráfico de Linha + Barra de Proporção ===================
-st.markdown("### 💵 Total Vendido por Período")
-
-col1, col2 = st.columns([4, 1])  # Gráfico grande (4/5) + barra lateral (1/5)
-
-with col1:
-    tipo_visualizacao = st.radio(
-        "📆 Período",
-        ["Diário", "Semanal", "Quinzenal", "Mensal"],
-        horizontal=True,
-        key="periodo"
-    )
-
-with col2:
-    modo_agregacao = st.radio(
-        "👥 Agrupamento",
-        ["Por Conta", "Total Geral"],
-        horizontal=True,
-        key="modo_agregacao"
-    )
-
-df_plot = df.copy()
-
-# Define date_bucket
-if de == ate:
-    df_plot["date_bucket"] = df_plot["date_adjusted"].dt.floor("H")
-    periodo_label = "Hora"
-else:
-    if tipo_visualizacao == "Diário":
-        df_plot["date_bucket"] = df_plot["date_adjusted"].dt.date
-        periodo_label = "Dia"
-    elif tipo_visualizacao == "Semanal":
-        df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("W").apply(lambda p: p.start_time.date())
-        periodo_label = "Semana"
-    elif tipo_visualizacao == "Quinzenal":
-        df_plot["quinzena"] = df_plot["date_adjusted"].apply(
-            lambda d: f"{d.year}-Q{(d.month-1)*2//30 + 1}-{1 if d.day <= 15 else 2}"
+    # =================== Gráfico de Linha + Barra de Proporção ===================
+    st.markdown("### 💵 Total Vendido por Período")
+    
+    col1, col2 = st.columns([4, 1])  # Gráfico grande (4/5) + barra lateral (1/5)
+    
+    with col1:
+        tipo_visualizacao = st.radio(
+            "📆 Período",
+            ["Diário", "Semanal", "Quinzenal", "Mensal"],
+            horizontal=True,
+            key="periodo"
         )
-        df_plot["date_bucket"] = df_plot["quinzena"]
-        periodo_label = "Quinzena"
+    
+    with col2:
+        modo_agregacao = st.radio(
+            "👥 Agrupamento",
+            ["Por Conta", "Total Geral"],
+            horizontal=True,
+            key="modo_agregacao"
+        )
+    
+    df_plot = df.copy()
+    
+    # Define date_bucket
+    if de == ate:
+        df_plot["date_bucket"] = df_plot["date_adjusted"].dt.floor("H")
+        periodo_label = "Hora"
     else:
-        df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("M").astype(str)
-        periodo_label = "Mês"
-
-# Agrupamento e definição de cores
-if modo_agregacao == "Por Conta":
-    vendas_por_data = (
-        df_plot.groupby(["date_bucket", "nickname"])["total_amount"]
-        .sum()
-        .reset_index(name="Valor Total")
-    )
-    color_dim = "nickname"
-    color_seq = px.colors.sequential.Agsunset
-    total_por_conta = (
-        df_plot.groupby("nickname")["total_amount"]
-        .sum()
-        .reset_index(name="total")
-        .sort_values("total", ascending=False)
-    )
-else:
-    vendas_por_data = (
-        df_plot.groupby("date_bucket")["total_amount"]
-        .sum()
-        .reset_index(name="Valor Total")
-    )
-    color_dim = None
-    color_seq = ["#27ae60"]
-    total_por_conta = None  # não mostra gráfico lateral nesse caso
-
-# Gráfico de linha principal
-with col1:
-    fig = px.line(
-        vendas_por_data,
-        x="date_bucket",
-        y="Valor Total",
-        color=color_dim,
-        labels={"date_bucket": periodo_label, "Valor Total": "Valor Total", "nickname": "Conta"},
-        color_discrete_sequence=color_seq,
-    )
-    fig.update_traces(mode="lines+markers", marker=dict(size=5))
-    fig.update_layout(margin=dict(t=20, b=20, l=40, r=10), showlegend=True)
-
-    st.plotly_chart(fig, use_container_width=True)
-
-# Gráfico de barra lateral proporcional por conta
-with col2:
-    if modo_agregacao == "Por Conta" and not total_por_conta.empty:
-        fig_bar = px.bar(
-            total_por_conta,
-            x="total",
-            y="nickname",
-            orientation="h",
-            color="nickname",
+        if tipo_visualizacao == "Diário":
+            df_plot["date_bucket"] = df_plot["date_adjusted"].dt.date
+            periodo_label = "Dia"
+        elif tipo_visualizacao == "Semanal":
+            df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("W").apply(lambda p: p.start_time.date())
+            periodo_label = "Semana"
+        elif tipo_visualizacao == "Quinzenal":
+            df_plot["quinzena"] = df_plot["date_adjusted"].apply(
+                lambda d: f"{d.year}-Q{(d.month-1)*2//30 + 1}-{1 if d.day <= 15 else 2}"
+            )
+            df_plot["date_bucket"] = df_plot["quinzena"]
+            periodo_label = "Quinzena"
+        else:
+            df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("M").astype(str)
+            periodo_label = "Mês"
+    
+    # Agrupamento e definição de cores
+    if modo_agregacao == "Por Conta":
+        vendas_por_data = (
+            df_plot.groupby(["date_bucket", "nickname"])["total_amount"]
+            .sum()
+            .reset_index(name="Valor Total")
+        )
+        color_dim = "nickname"
+        color_seq = px.colors.sequential.Agsunset
+        total_por_conta = (
+            df_plot.groupby("nickname")["total_amount"]
+            .sum()
+            .reset_index(name="total")
+            .sort_values("total", ascending=False)
+        )
+    else:
+        vendas_por_data = (
+            df_plot.groupby("date_bucket")["total_amount"]
+            .sum()
+            .reset_index(name="Valor Total")
+        )
+        color_dim = None
+        color_seq = ["#27ae60"]
+        total_por_conta = None  # não mostra gráfico lateral nesse caso
+    
+    # Gráfico de linha principal
+    with col1:
+        fig = px.line(
+            vendas_por_data,
+            x="date_bucket",
+            y="Valor Total",
+            color=color_dim,
+            labels={"date_bucket": periodo_label, "Valor Total": "Valor Total", "nickname": "Conta"},
             color_discrete_sequence=color_seq,
         )
-        fig_bar.update_layout(
-            xaxis=dict(visible=False),
-            yaxis=dict(title=None),
-            showlegend=False,
-            margin=dict(t=20, b=20, l=10, r=10),
-            height=fig.layout.height,
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        fig.update_traces(mode="lines+markers", marker=dict(size=5))
+        fig.update_layout(margin=dict(t=20, b=20, l=40, r=10), showlegend=True)
+    
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Gráfico de barra lateral proporcional por conta
+    with col2:
+        if modo_agregacao == "Por Conta" and not total_por_conta.empty:
+            fig_bar = px.bar(
+                total_por_conta,
+                x="total",
+                y="nickname",
+                orientation="h",
+                color="nickname",
+                color_discrete_sequence=color_seq,
+            )
+            fig_bar.update_layout(
+                xaxis=dict(visible=False),
+                yaxis=dict(title=None),
+                showlegend=False,
+                margin=dict(t=20, b=20, l=10, r=10),
+                height=fig.layout.height,
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
 
 
 
