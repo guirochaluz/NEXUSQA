@@ -1,14 +1,14 @@
-from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
+from sqlalchemy import create_engine
 from datetime import datetime
 import requests
 
-# Carrega .env
+# Carregar variáveis de ambiente
 load_dotenv()
-
-# Configura banco de dados
 DB_URL = os.getenv("DB_URL")
+
+# Criar engine do banco de dados com parâmetros personalizados
 engine = create_engine(
     DB_URL,
     pool_size=5,
@@ -16,10 +16,10 @@ engine = create_engine(
     pool_timeout=30
 )
 
-# Data de corte padrão para filtros ou fees
+# Data de corte para busca de vendas ou taxas
 DATA_INICIO = datetime(2024, 5, 16)
 
-# Função para buscar a taxa ML
+# Função para buscar taxa de comissão no Mercado Livre
 def buscar_ml_fee(order_id: str, access_token: str):
     url = f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}"
     try:
