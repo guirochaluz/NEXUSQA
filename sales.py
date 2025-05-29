@@ -103,7 +103,6 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         if internal_session:
             db.close()
 
-
 def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     from db import SessionLocal
     from models import Sale
@@ -113,6 +112,8 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
     import requests
     from requests.exceptions import HTTPError
     import os
+    from concurrent.futures import ThreadPoolExecutor
+    from main import buscar_ml_fee, engine, DATA_INICIO  # ajuste conforme onde estão definidos
 
     API_BASE = "https://api.mercadolibre.com/orders/search"
     FULL_PAGE_SIZE = 50
@@ -200,6 +201,37 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
             total_saved += 1
 
         db.commit()
+
+        # ✅ Atualização complementar das taxas
+        print(f"\n📊 Iniciando atualização de taxas pendentes para usuário {ml_user_id}...")
+
+        with engine.begin() as conn:
+            pedidos = conn.execute(text("""
+                SELECT order_id FROM sales
+                WHERE ml_user_id = :uid AND ml_fee IS NULL AND date_closed >= :inicio
+            """), {"uid": ml_user_id, "inicio": DATA_INICIO}).fetchall()
+
+        pedidos_ids = [row[0] for row in pedidos]
+        if not pedidos_ids:
+            print(f"📭 Nenhuma venda pendente para atualizar fees de {ml_user_id}.")
+        else:
+            print(f"📦 {len(pedidos_ids)} vendas sem fee. Atualizando com até 10 threads...")
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                resultados = list(executor.map(lambda oid: buscar_ml_fee(oid, access_token), pedidos_ids))
+
+            with engine.begin() as conn:
+                atualizadas = 0
+                for i, (order_id, fee) in enumerate(resultados, 1):
+                    if fee is not None:
+                        conn.execute(text("""
+                            UPDATE sales SET ml_fee = :fee WHERE order_id = :oid
+                        """), {"fee": fee, "oid": order_id})
+                        atualizadas += 1
+                        print(f"💾 Atualizado {i}/{len(pedidos_ids)} | Pedido {order_id} | Fee R${fee}")
+                    else:
+                        print(f"⏭️ Pulado {i}/{len(pedidos_ids)} | Pedido {order_id} sem fee.")
+
+            print(f"✅ Atualização de fees concluída: {atualizadas}/{len(pedidos_ids)} vendas.")
 
     except Exception as e:
         db.rollback()
