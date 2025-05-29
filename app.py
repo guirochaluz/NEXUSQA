@@ -543,24 +543,25 @@ def mostrar_dashboard():
     margem_operacional = total_valor - frete - taxa_mktplace - cmv
     sem_sku          = df["quantity_sku"].isnull().sum()
     
-    pct = lambda val: f"<span style='font-size: 70%'>&nbsp;({val / total_valor * 100:.1f}%)</span>" if total_valor else "<span style='font-size: 70%'>&nbsp;(0%)</span>"
+    pct = lambda val: f"<span style='font-size: 70%; color: #666; display: inline-block; margin-left: 6px;'>({val / total_valor * 100:.1f}%)</span>" if total_valor else "<span style='font-size: 70%'>(0%)</span>"
+
     
     # Bloco 1: Indicadores Financeiros
     st.markdown("### 💼 Indicadores Financeiros")
     row1 = st.columns(5)
     kpi_card(row1[0], "💰 Faturamento", format_currency(total_valor))
-    kpi_card(row1[1], "🚚 Frete Estimado", f"{format_currency(frete)}<br>{pct(frete)}")
-    kpi_card(row1[2], "📉 Taxa Marketplace", f"{format_currency(taxa_mktplace)}<br>{pct(taxa_mktplace)}")
-    kpi_card(row1[3], "📦 CMV", f"{format_currency(cmv)}<br>{pct(cmv)}")
-    kpi_card(row1[4], "💵 Margem Operacional", f"{format_currency(margem_operacional)}<br>{pct(margem_operacional)}")
+    kpi_card(row1[1], "🚚 Frete Estimado", f"{format_currency(frete)} {pct(frete)}")
+    kpi_card(row1[2], "📉 Taxa Marketplace", f"{format_currency(taxa_mktplace)} {pct(taxa_mktplace)}")
+    kpi_card(row1[3], "📦 CMV", f"{format_currency(cmv)} {pct(cmv)}")
+    kpi_card(row1[4], "💵 Margem Operacional", f"{format_currency(margem_operacional)} {pct(margem_operacional)}")
     
     # Bloco 2: Indicadores de Vendas
     st.markdown("### 📊 Indicadores de Vendas")
     row2 = st.columns(5)
     kpi_card(row2[0], "🧾 Vendas Realizadas", str(total_vendas))
     kpi_card(row2[1], "📦 Unidades Vendidas", str(int(total_itens)))
-    kpi_card(row2[2], "🎯 Ticket Médio p/ Venda", format_currency(ticket_venda))
-    kpi_card(row2[3], "🎯 Ticket Médio p/ Unid.", format_currency(ticket_unidade))
+    kpi_card(row2[2], "🎯 Tkt Médio p/ Venda", format_currency(ticket_venda))
+    kpi_card(row2[3], "🎯 Tkt Médio p/ Unid.", format_currency(ticket_unidade))
     kpi_card(row2[4], "❌ SKU Incompleto", str(sem_sku))
     
     import plotly.express as px
