@@ -1109,6 +1109,19 @@ def mostrar_relatorios():
 
 
 def mostrar_gestao_sku():
+
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    
     st.header("📦 Gestão de SKU")
 
     # 🔄 Botão de atualização
