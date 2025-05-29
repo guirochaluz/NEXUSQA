@@ -840,7 +840,7 @@ def mostrar_dashboard():
             z=tabela_calor.values,
             x=tabela_calor.columns,
             y=tabela_calor.index,
-            colorscale="Greens",
+            colorscale="Viridis",
             colorbar=dict(title="Média R$")
         )
         fig_calor = go.Figure(data=[heatmap])
@@ -848,9 +848,20 @@ def mostrar_dashboard():
             title="🔥 Vendas por Hora x Dia da Semana",
             xaxis_title="Hora do Dia",
             yaxis_title="Dia da Semana",
-            margin=dict(t=40, l=40, r=40, b=40)
+            margin=dict(t=40, l=40, r=40, b=40),
+            plot_bgcolor="#0e1117",
+            paper_bgcolor="#0e1117",
+            font=dict(color="white"),
+            xaxis=dict(showgrid=False, zeroline=False),
+            yaxis=dict(showgrid=False, zeroline=False),
+            coloraxis_colorbar=dict(
+                title="Média R$",
+                tickfont=dict(color="white"),
+                titlefont=dict(color="white")
+            )
         )
         st.plotly_chart(fig_calor, use_container_width=True)
+
 
 
 
