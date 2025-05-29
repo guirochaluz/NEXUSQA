@@ -611,7 +611,7 @@ def mostrar_dashboard():
             df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("M").astype(str)
             periodo_label = "Mês"
     
-    # Agrupamento e cores
+    # Agrupamento e definição de cores
     if modo_agregacao == "Por Conta":
         vendas_por_data = (
             df_plot.groupby(["date_bucket", "nickname"])["total_amount"]
@@ -619,13 +619,18 @@ def mostrar_dashboard():
             .reset_index(name="Valor Total")
         )
         color_dim = "nickname"
-        color_seq = px.colors.sequential.Agsunset
+    
         total_por_conta = (
             df_plot.groupby("nickname")["total_amount"]
             .sum()
             .reset_index(name="total")
             .sort_values("total", ascending=False)
         )
+    
+        color_palette = px.colors.sequential.Agsunset
+        nicknames = total_por_conta["nickname"].tolist()
+        color_map = {nick: color_palette[i % len(color_palette)] for i, nick in enumerate(nicknames)}
+    
     else:
         vendas_por_data = (
             df_plot.groupby("date_bucket")["total_amount"]
@@ -633,7 +638,7 @@ def mostrar_dashboard():
             .reset_index(name="Valor Total")
         )
         color_dim = None
-        color_seq = ["#27ae60"]
+        color_map = None  # Não será usado
         total_por_conta = None
     
     # 🔢 Gráfico(s)
@@ -651,7 +656,7 @@ def mostrar_dashboard():
             y="Valor Total",
             color=color_dim,
             labels={"date_bucket": periodo_label, "Valor Total": "Valor Total", "nickname": "Conta"},
-            color_discrete_sequence=color_seq,
+            color_discrete_map=color_map,
         )
         fig.update_traces(mode="lines+markers", marker=dict(size=5))
         fig.update_layout(
@@ -660,7 +665,7 @@ def mostrar_dashboard():
         )
         st.plotly_chart(fig, use_container_width=True)
     
-    # 📊 Barra vertical proporcional (apenas se "Por Conta")
+    # 📊 Gráfico de barra proporcional (somente se Por Conta)
     if modo_agregacao == "Por Conta" and not total_por_conta.empty:
         total_por_conta["percentual"] = total_por_conta["total"] / total_por_conta["total"].sum()
     
@@ -678,7 +683,7 @@ def mostrar_dashboard():
             y="percentual",
             color="nickname",
             text="texto",
-            color_discrete_sequence=color_seq,
+            color_discrete_map=color_map,
         )
     
         fig_bar.update_layout(
@@ -697,6 +702,7 @@ def mostrar_dashboard():
     
         with col2:
             st.plotly_chart(fig_bar, use_container_width=True)
+
 
 
 
