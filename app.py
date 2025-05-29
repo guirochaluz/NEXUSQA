@@ -508,6 +508,8 @@ def mostrar_dashboard():
                 font-size: 22px;
                 font-weight: bold;
                 color: #000000;
+                line-height: 1.2;
+                word-break: break-word;
             }
             .kpi-card {
                 background-color: #ffffff;
@@ -532,7 +534,7 @@ def mostrar_dashboard():
     # Cálculos (ajustado)
     total_vendas     = len(df)
     total_valor      = df["total_amount"].sum()
-    total_itens      = df["quantity_sku"].sum()
+    total_itens      = (df["quantity_sku"] * df["quantity"]).sum()
     ticket_venda     = total_valor / total_vendas if total_vendas else 0
     ticket_unidade   = total_valor / total_itens if total_itens else 0
     frete            = total_valor * 0.10
@@ -541,14 +543,16 @@ def mostrar_dashboard():
     margem_operacional = total_valor - frete - taxa_mktplace - cmv
     sem_sku          = df["quantity_sku"].isnull().sum()
     
+    pct = lambda val: f"<span style='font-size: 70%'>&nbsp;({val / total_valor * 100:.1f}%)</span>" if total_valor else "<span style='font-size: 70%'>&nbsp;(0%)</span>"
+    
     # Bloco 1: Indicadores Financeiros
     st.markdown("### 💼 Indicadores Financeiros")
     row1 = st.columns(5)
     kpi_card(row1[0], "💰 Faturamento", format_currency(total_valor))
-    kpi_card(row1[1], "🚚 Frete Estimado", format_currency(frete))
-    kpi_card(row1[2], "📉 Taxa Marketplace", format_currency(taxa_mktplace))
-    kpi_card(row1[3], "📦 CMV", format_currency(cmv))
-    kpi_card(row1[4], "💵 Margem Operacional", format_currency(margem_operacional))
+    kpi_card(row1[1], "🚚 Frete Estimado", f"{format_currency(frete)}<br>{pct(frete)}")
+    kpi_card(row1[2], "📉 Taxa Marketplace", f"{format_currency(taxa_mktplace)}<br>{pct(taxa_mktplace)}")
+    kpi_card(row1[3], "📦 CMV", f"{format_currency(cmv)}<br>{pct(cmv)}")
+    kpi_card(row1[4], "💵 Margem Operacional", f"{format_currency(margem_operacional)}<br>{pct(margem_operacional)}")
     
     # Bloco 2: Indicadores de Vendas
     st.markdown("### 📊 Indicadores de Vendas")
