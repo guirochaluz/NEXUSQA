@@ -371,45 +371,29 @@ def mostrar_dashboard():
     contas_df = pd.read_sql(text("SELECT nickname FROM user_tokens ORDER BY nickname"), engine)
     contas_lst = contas_df["nickname"].astype(str).tolist()
     
-    st.markdown("""
-        <style>
-            input[type="checkbox"]:checked + div span {
-                background-color: #27ae60 !important;
-            }
-            .mini-toggle-button {
-                background-color: transparent;
-                color: #999;
-                border: 1px solid #444;
-                padding: 2px 8px;
-                font-size: 12px;
-                border-radius: 4px;
-                cursor: pointer;
-                margin-bottom: 4px;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-    
     st.markdown("**🧾 Contas Mercado Livre:**")
 
     st.markdown("""
         <style>
-            /* Muda apenas o quadrado do checkbox marcado */
-            [data-testid="stCheckbox"] input:checked + div > div {
+            /* Quadrado do checkbox marcado: verde */
+            [data-testid="stCheckbox"] input:checked + div > div:first-child {
                 background-color: #27ae60 !important;
-                border: 1px solid #27ae60 !important;
+                border-color: #27ae60 !important;
             }
     
-            /* Mantém o fundo do texto transparente (sem cor de fundo no label) */
+            /* Texto da label: branco, sem fundo */
             [data-testid="stCheckbox"] label {
-                background: none !important;
+                background-color: transparent !important;
             }
     
-            /* Garante que o texto permaneça branco */
             [data-testid="stCheckbox"] label > div:nth-child(2) {
+                background-color: transparent !important;
                 color: white !important;
+                padding: 0px !important;
             }
         </style>
     """, unsafe_allow_html=True)
+
 
 
 
