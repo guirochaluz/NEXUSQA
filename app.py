@@ -570,23 +570,26 @@ def mostrar_dashboard():
     st.markdown("### 💵 Total Vendido por Período")
     
     # 🔘 Seletor de período + agrupamento lado a lado
-    colsel1, colsel2 = st.columns([2, 2])
+    colsel1, colsel2 = st.columns([1, 1])
     
     with colsel1:
+        st.markdown("**📆 Período**")
         tipo_visualizacao = st.radio(
-            "📆 Período",
-            ["Diário", "Semanal", "Quinzenal", "Mensal"],
+            label="",
+            options=["Diário", "Semanal", "Quinzenal", "Mensal"],
             horizontal=True,
             key="periodo"
         )
     
     with colsel2:
+        st.markdown("**👥 Agrupamento**")
         modo_agregacao = st.radio(
-            "👥 Agrupamento",
-            ["Por Conta", "Total Geral"],
+            label="",
+            options=["Por Conta", "Total Geral"],
             horizontal=True,
             key="modo_agregacao"
         )
+
     
     df_plot = df.copy()
     
@@ -798,22 +801,57 @@ def mostrar_dashboard():
         }])
         media_acumulada_por_hora = pd.concat([media_acumulada_por_hora, ponto_final]).groupby("hora").last().reset_index()
     
-    # Plota o gráfico
-    fig_hora = px.line(
-        media_acumulada_por_hora,
-        x="hora",
-        y="Valor Médio Acumulado",
-        title="⏰ Faturamento Acumulado por Hora (Média por Dia)",
-        labels={
-            "hora": "Hora do Dia",
-            "Valor Médio Acumulado": "Valor Acumulado (R$)"
-        },
-        color_discrete_sequence=["#27ae60"],
-        markers=True
-    )
-    fig_hora.update_layout(xaxis=dict(dtick=1))
+    import plotly.graph_objects as go
     
-    st.plotly_chart(fig_hora, use_container_width=True)
+    # === Criar colunas para os dois gráficos ===
+    col_hora, col_calor = st.columns([3, 2])
+
+    # 📈 Gráfico de Faturamento Acumulado por Hora (Média por Dia)
+    with col_hora:
+        fig_hora = px.line(
+            media_acumulada_por_hora,
+            x="hora",
+            y="Valor Médio Acumulado",
+            title="⏰ Faturamento Acumulado por Hora (Média por Dia)",
+            labels={
+                "hora": "Hora do Dia",
+                "Valor Médio Acumulado": "Valor Acumulado (R$)"
+            },
+            color_discrete_sequence=["#27ae60"],
+            markers=True
+        )
+        fig_hora.update_layout(xaxis=dict(dtick=1))
+        st.plotly_chart(fig_hora, use_container_width=True)
+    
+    # 🔥 Mapa de Calor de Vendas por Hora x Dia da Semana
+    with col_calor:
+        dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        df["dia_semana"] = df["date_adjusted"].dt.day_name().map({
+            "Monday": "Segunda", "Tuesday": "Terça", "Wednesday": "Quarta",
+            "Thursday": "Quinta", "Friday": "Sexta", "Saturday": "Sábado", "Sunday": "Domingo"
+        })
+        tabela_calor = (
+            df.groupby(["dia_semana", "hora"])["total_amount"]
+            .mean()
+            .unstack(fill_value=0)
+            .reindex(index=dias, fill_value=0)
+        )
+        heatmap = go.Heatmap(
+            z=tabela_calor.values,
+            x=tabela_calor.columns,
+            y=tabela_calor.index,
+            colorscale="Greens",
+            colorbar=dict(title="Média R$")
+        )
+        fig_calor = go.Figure(data=[heatmap])
+        fig_calor.update_layout(
+            title="🔥 Vendas por Hora x Dia da Semana",
+            xaxis_title="Hora do Dia",
+            yaxis_title="Dia da Semana",
+            margin=dict(t=40, l=40, r=40, b=40)
+        )
+        st.plotly_chart(fig_calor, use_container_width=True)
+
 
 
 
