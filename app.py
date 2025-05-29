@@ -783,6 +783,16 @@ def mostrar_dashboard():
 
 
 def mostrar_contas_cadastradas():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("🏷️ Contas Cadastradas")
     render_add_account_button()
 
@@ -894,6 +904,17 @@ def mostrar_contas_cadastradas():
                         )
 
 def mostrar_anuncios():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.header("🎯 Análise de Anúncios")
     df = carregar_vendas()
 
@@ -1040,6 +1061,17 @@ def mostrar_anuncios():
     )
 
 def mostrar_relatorios():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.header("📋 Relatórios de Vendas")
 
     df = carregar_vendas()
@@ -1326,14 +1358,44 @@ def mostrar_gestao_sku():
 
 
 def mostrar_expedicao_logistica():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("🚚 Expedição e Logística")
     st.info("Em breve...")
 
 def mostrar_gestao_despesas():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("💰 Gestão de Despesas")
     st.info("Em breve...")
 
 def mostrar_painel_metas():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("🎯 Painel de Metas")
     st.info("Em breve...")
     
