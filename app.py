@@ -1162,39 +1162,39 @@ def mostrar_relatorios():
 
 
 def mostrar_gestao_sku():
-
-    st.markdown(
-        """
+    st.markdown("""
         <style>
         .block-container {
             padding-top: 0rem;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
-    
     st.header("📦 Gestão de SKU")
 
-    # 🔄 Botão de atualização
     if st.button("🔄 Recarregar Dados"):
         st.session_state["atualizar_gestao_sku"] = True
 
-    # Carregamento dos dados da base
+    # === Consulta de SKUs únicos ===
     if st.session_state.get("atualizar_gestao_sku", False) or "df_gestao_sku" not in st.session_state:
         df = pd.read_sql(text("""
-            SELECT DISTINCT ON (item_id)
-                item_id, seller_sku, level1, level2, custo_unitario, quantity_sku
+            SELECT
+                seller_sku,
+                MAX(level1) AS level1,
+                MAX(level2) AS level2,
+                MAX(custo_unitario) AS custo_unitario,
+                MAX(quantity_sku) AS quantity_sku,
+                COUNT(DISTINCT item_id) AS qtde_vendas
             FROM sales
-            ORDER BY item_id, date_closed DESC
+            WHERE seller_sku IS NOT NULL
+            GROUP BY seller_sku
         """), engine)
         st.session_state["df_gestao_sku"] = df
         st.session_state["atualizar_gestao_sku"] = False
     else:
         df = st.session_state["df_gestao_sku"]
 
-    # 🔢 Métricas
+    # === Métricas ===
     with engine.begin() as conn:
         vendas_sem_sku = conn.execute(text("SELECT COUNT(*) FROM sales WHERE seller_sku IS NULL")).scalar()
         mlbs_sem_sku = conn.execute(text("SELECT COUNT(DISTINCT item_id) FROM sales WHERE seller_sku IS NULL")).scalar()
@@ -1214,15 +1214,15 @@ def mostrar_gestao_sku():
     st.markdown("---")
     st.markdown("### 🔍 Filtros de Diagnóstico")
 
-    # Filtros
+    # === Filtros ===
     colf1, colf2, colf3, colf4, colf5 = st.columns([1.2, 1.2, 1.2, 1.2, 2])
     op_sku     = colf1.selectbox("Seller SKU", ["Todos", "Nulo", "Não Nulo"])
     op_level1  = colf2.selectbox("Hierarquia 1", ["Todos", "Nulo", "Não Nulo"])
     op_level2  = colf3.selectbox("Hierarquia ", ["Todos", "Nulo", "Não Nulo"])
     op_preco   = colf4.selectbox("Preço Unitário", ["Todos", "Nulo", "Não Nulo"])
-    filtro_txt = colf5.text_input("🔎 Pesquisa (MLB, Seller SKU, Hierarquias)")
+    filtro_txt = colf5.text_input("🔎 Pesquisa (SKU, Hierarquias)")
 
-    # Aplicar filtros
+    # === Aplicar filtros ===
     if op_sku == "Nulo":
         df = df[df["seller_sku"].isna()]
     elif op_sku == "Não Nulo":
@@ -1241,17 +1241,15 @@ def mostrar_gestao_sku():
         df = df[df["custo_unitario"].notna()]
     if filtro_txt:
         filtro_txt = filtro_txt.lower()
-        df = df[df.apply(lambda row: filtro_txt in str(row["item_id"]).lower()
-                         or filtro_txt in str(row["seller_sku"]).lower()
+        df = df[df.apply(lambda row: filtro_txt in str(row["seller_sku"]).lower()
                          or filtro_txt in str(row["level1"]).lower()
                          or filtro_txt in str(row["level2"]).lower(), axis=1)]
 
-    # 🔄 Tabela editável
+    # === Tabela editável ===
     st.markdown("### 📝 Editar Cadastro de SKUs")
-    
-    # Permitir edição apenas nestas colunas
-    colunas_editaveis = ["seller_sku", "level1", "level2", "custo_unitario", "quantity_sku"]
-    
+
+    colunas_editaveis = ["level1", "level2", "custo_unitario", "quantity_sku"]
+
     df_editado = st.data_editor(
         df,
         use_container_width=True,
@@ -1259,8 +1257,8 @@ def mostrar_gestao_sku():
         num_rows="dynamic",
         key="editor_sku"
     )
-    
-    # Salvar alterações no banco
+
+    # === Salvar alterações ===
     if st.button("💾 Salvar Alterações"):
         try:
             with engine.begin() as conn:
@@ -1281,8 +1279,7 @@ def mostrar_gestao_sku():
                         "custo": row["custo_unitario"],
                         "quantidade": row["quantity_sku"]
                     })
-    
-                # Atualizar tabela de vendas com os dados mais recentes da SKU
+
                 conn.execute(text("""
                     UPDATE sales s
                     SET
@@ -1296,13 +1293,14 @@ def mostrar_gestao_sku():
                     ) sku
                     WHERE s.seller_sku = sku.sku
                 """))
-    
+
             st.success("✅ Alterações salvas com sucesso!")
             st.session_state["atualizar_gestao_sku"] = True
             st.rerun()
-    
+
         except Exception as e:
             st.error(f"❌ Erro ao salvar alterações: {e}")
+
 
 
     # 5️⃣ Atualização da base SKU via planilha
