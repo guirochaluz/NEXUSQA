@@ -373,29 +373,6 @@ def mostrar_dashboard():
     
     st.markdown("**🧾 Contas Mercado Livre:**")
 
-    st.markdown("""
-        <style>
-            /* Quadrado do checkbox marcado: verde */
-            [data-testid="stCheckbox"] input:checked + div > div:first-child {
-                background-color: #27ae60 !important;
-                border-color: #27ae60 !important;
-            }
-    
-            /* Remove fundo de qualquer parte da label do checkbox */
-            [data-testid="stCheckbox"] label {
-                background-color: transparent !important;
-            }
-    
-            [data-testid="stCheckbox"] div[data-baseweb="checkbox"] {
-                background-color: transparent !important;
-            }
-    
-            [data-testid="stCheckbox"] div[data-testid="stMarkdownContainer"] {
-                background-color: transparent !important;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
 
     # Estado para controlar se todas estão selecionadas
     if "todas_contas_marcadas" not in st.session_state:
