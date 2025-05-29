@@ -4,11 +4,16 @@ import requests
 from dateutil import parser
 from db import SessionLocal
 from models import Sale
-from sqlalchemy import func, text
+from sqlalchemy import func, text, create_engine
 from typing import Optional, Tuple, List
 from dotenv import load_dotenv
 from dateutil.tz import tzutc
 from requests.exceptions import HTTPError
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -573,3 +578,4 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
         db.close()
 
     return total_saved
+
