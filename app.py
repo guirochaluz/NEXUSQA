@@ -1208,34 +1208,55 @@ def mostrar_gestao_sku():
             st.error("❌ A planilha deve conter: seller_sku, level1, level2, custo_unitario, quantity.")
         else:
             if st.button("✅ Processar Planilha e Atualizar"):
-                try:
-                    df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
-                    df_novo["custo_unitario"] = df_novo["custo_unitario"].fillna(0).astype(float)
-                    df_novo["seller_sku"] = df_novo["seller_sku"].astype(str).str.strip()
-                    df_novo["level1"] = df_novo["level1"].astype(str).str.strip()
-                    df_novo["level2"] = df_novo["level2"].astype(str).str.strip()
-    
-                    with engine.begin() as conn:
-                        for _, row in df_novo.iterrows():
-                            row_dict = row.to_dict()
-                            result = conn.execute(text("""
-                                SELECT 1 FROM sku
-                                WHERE sku = :seller_sku
-                                  AND TRIM(level1) = :level1
-                                  AND TRIM(level2) = :level2
-                                  AND ROUND(CAST(custo_unitario AS numeric), 2) = ROUND(CAST(:custo_unitario AS numeric), 2)
-                                  AND quantity = :quantity
-                                LIMIT 1
-                            """), row_dict).fetchone()
-                            if result is None:
-                                conn.execute(text("""
-                                    INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
-                                    VALUES (:seller_sku, :level1, :level2, :custo_unitario, :quantity, NOW())
-                                """), row_dict)
-                    st.success("✅ Planilha importada com sucesso!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Erro ao processar: {e}")
+    try:
+        df_novo["quantity"] = df_novo["quantity"].fillna(0).astype(int)
+        df_novo["custo_unitario"] = df_novo["custo_unitario"].fillna(0).astype(float)
+        df_novo["seller_sku"] = df_novo["seller_sku"].astype(str).str.strip()
+        df_novo["level1"] = df_novo["level1"].astype(str).str.strip()
+        df_novo["level2"] = df_novo["level2"].astype(str).str.strip()
+
+        with engine.begin() as conn:
+            # 1️⃣ Insere os dados novos na tabela sku
+            for _, row in df_novo.iterrows():
+                row_dict = row.to_dict()
+                result = conn.execute(text("""
+                    SELECT 1 FROM sku
+                    WHERE sku = :seller_sku
+                      AND TRIM(level1) = :level1
+                      AND TRIM(level2) = :level2
+                      AND ROUND(CAST(custo_unitario AS numeric), 2) = ROUND(CAST(:custo_unitario AS numeric), 2)
+                      AND quantity = :quantity
+                    LIMIT 1
+                """), row_dict).fetchone()
+
+                if result is None:
+                    conn.execute(text("""
+                        INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
+                        VALUES (:seller_sku, :level1, :level2, :custo_unitario, :quantity, NOW())
+                    """), row_dict)
+
+            # 2️⃣ Atualiza os dados da tabela sales com os dados mais recentes da sku
+            conn.execute(text("""
+                UPDATE sales s
+                SET
+                    level1 = sku.level1,
+                    level2 = sku.level2,
+                    custo_unitario = sku.custo_unitario,
+                    quantity_sku = sku.quantity
+                FROM (
+                    SELECT DISTINCT ON (sku) *
+                    FROM sku
+                    ORDER BY sku, date_created DESC
+                ) sku
+                WHERE s.seller_sku = sku.sku
+            """))
+
+        st.success("✅ Planilha importada e tabela de vendas atualizada com sucesso!")
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"❌ Erro ao processar: {e}")
+
 
 def mostrar_expedicao_logistica():
     st.header("🚚 Expedição e Logística")
