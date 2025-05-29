@@ -120,13 +120,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- Banco de Dados -----------------
-engine = create_engine(
-    DB_URL,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30
-)
+
 
 # ----------------- OAuth Callback -----------------
 def ml_callback():
