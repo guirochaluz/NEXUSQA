@@ -45,6 +45,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
 import io
+from datetime import datetime, timedelta
 
 
 # 4) Configuração de locale
