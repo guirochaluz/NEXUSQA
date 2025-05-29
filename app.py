@@ -381,20 +381,20 @@ def mostrar_dashboard():
                 border-color: #27ae60 !important;
             }
     
-            /* Texto da label: branco, sem fundo */
+            /* Remove fundo de qualquer parte da label do checkbox */
             [data-testid="stCheckbox"] label {
                 background-color: transparent !important;
             }
     
-            [data-testid="stCheckbox"] label > div:nth-child(2) {
+            [data-testid="stCheckbox"] div[data-baseweb="checkbox"] {
                 background-color: transparent !important;
-                color: white !important;
-                padding: 0px !important;
+            }
+    
+            [data-testid="stCheckbox"] div[data-testid="stMarkdownContainer"] {
+                background-color: transparent !important;
             }
         </style>
     """, unsafe_allow_html=True)
-
-
 
 
     # Estado para controlar se todas estão selecionadas
@@ -416,8 +416,6 @@ def mostrar_dashboard():
     # Aplica filtro
     if selecionadas:
         df_full = df_full[df_full["nickname"].isin(selecionadas)]
-
-
 
 
     # --- Linha única de filtros: Rápido | De | Até | Status ---
