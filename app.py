@@ -1061,6 +1061,7 @@ def mostrar_anuncios():
     )
 
 def mostrar_relatorios():
+    # Remove o espaçamento superior
     st.markdown(
         """
         <style>
@@ -1082,15 +1083,26 @@ def mostrar_relatorios():
 
     df['date_adjusted'] = pd.to_datetime(df['date_adjusted'])
 
-    # Filtro de período
-    col1, col2 = st.columns(2)
-    with col1:
-        data_ini = st.date_input("De:", value=df['date_adjusted'].min().date())
-    with col2:
-        data_fim = st.date_input("Até:", value=df['date_adjusted'].max().date())
+    # === Filtro Rápido ===
+    col1, col2, col3 = st.columns(3)
+    hoje = datetime.now().date()
+    ultimos_7 = hoje - timedelta(days=6)
+    ultimos_30 = hoje - timedelta(days=29)
+
+    filtro_rapido = col1.selectbox("📅 Período rápido:", ["Hoje", "Últimos 7 dias", "Últimos 30 dias", "Personalizado"])
+
+    if filtro_rapido == "Hoje":
+        data_ini = data_fim = hoje
+    elif filtro_rapido == "Últimos 7 dias":
+        data_ini, data_fim = ultimos_7, hoje
+    elif filtro_rapido == "Últimos 30 dias":
+        data_ini, data_fim = ultimos_30, hoje
+    else:
+        data_ini = col2.date_input("De:", value=df['date_adjusted'].min().date())
+        data_fim = col3.date_input("Até:", value=df['date_adjusted'].max().date())
 
     df_filt = df.loc[
-        (df['date_adjusted'].dt.date >= data_ini) &
+        (df['date_adjusted'].dt.date >= data_ini) & 
         (df['date_adjusted'].dt.date <= data_fim)
     ]
 
@@ -1098,46 +1110,58 @@ def mostrar_relatorios():
         st.warning("Nenhuma venda no período selecionado.")
         return
 
-    # Adiciona coluna de link para o anúncio
+    # === Preparar dados para exibição ===
+    df_filt = df_filt.copy()
+    df_filt['Quantidade'] = df_filt['quantity'] * df_filt['quantity_sku'].fillna(1)
+
+    df_filt['Preço Unitário'] = df_filt['unit_price'].apply(
+        lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    )
+    df_filt['Total da Venda'] = df_filt['total_amount'].apply(
+        lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    )
+    df_filt['Data da Venda'] = df_filt['date_adjusted'].dt.strftime('%d/%m/%Y')
+
     df_filt['link'] = df_filt['item_id'].apply(
         lambda x: f"[🔗 Ver Anúncio](https://www.mercadolivre.com.br/anuncio/{x})"
     )
 
-    # Reorganiza e seleciona as colunas principais
-    colunas = [
-        'date_adjusted',
-        'item_id',
-        'item_title',
-        'quantity',
-        'unit_price',
-        'total_amount',
-        'order_id',
-        'buyer_nickname',
-        'ml_user_id',
-        'status',
-        'link'
-    ]
+    # Ordenar por data desc
+    df_filt = df_filt.sort_values("date_adjusted", ascending=False)
 
-    df_exibir = df_filt[colunas].copy()
-
-    # Formatação visual
-    df_exibir['unit_price'] = df_exibir['unit_price'].apply(
-        lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    )
-    df_exibir['total_amount'] = df_exibir['total_amount'].apply(
-        lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    )
+    # Reorganizar e renomear colunas
+    df_exibir = df_filt.rename(columns={
+        "order_id": "ID da Venda",
+        "item_id": "MLB",
+        "item_title": "Título do Anúncio"
+    })[[
+        "ID da Venda",
+        "Data da Venda",
+        "MLB",
+        "Título do Anúncio",
+        "Quantidade",
+        "Preço Unitário",
+        "Total da Venda",
+        "link"
+    ]]
 
     st.dataframe(df_exibir, use_container_width=True)
 
-    # Exportação CSV com dados crus
-    csv = df_filt[colunas].to_csv(index=False).encode('utf-8')
+    # Exportação CSV (valores crus, sem formatação)
+    df_exportar = df_filt[[
+        "order_id", "date_adjusted", "item_id", "item_title",
+        "quantity", "quantity_sku", "unit_price", "total_amount"
+    ]]
+    df_exportar["quantidade_total"] = df_exportar["quantity"] * df_exportar["quantity_sku"].fillna(1)
+
+    csv = df_exportar.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Exportar CSV das Vendas",
         data=csv,
         file_name="relatorio_vendas.csv",
         mime="text/csv"
     )
+
 
 
 def mostrar_gestao_sku():
