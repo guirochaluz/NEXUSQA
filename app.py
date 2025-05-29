@@ -564,13 +564,22 @@ def mostrar_dashboard():
     # =================== Gráfico de Linha + Barra de Proporção ===================
     st.markdown("### 💵 Total Vendido por Período")
     
-    # Ajusta as colunas com base no modo de agregação
+    # 📌 Primeiro definimos o modo de agregação (para organizar layout abaixo)
+    modo_agregacao = st.radio(
+        "👥 Agrupamento",
+        ["Por Conta", "Total Geral"],
+        horizontal=True,
+        key="modo_agregacao"
+    )
+    
+    # Layout de colunas depende da escolha de agregação
     if modo_agregacao == "Por Conta":
         col1, col2 = st.columns([4, 1])
     else:
         col1 = st.container()
         col2 = None
     
+    # 📆 Seletor de período
     with col1:
         tipo_visualizacao = st.radio(
             "📆 Período",
@@ -579,18 +588,10 @@ def mostrar_dashboard():
             key="periodo"
         )
     
-    if col2:
-        with col2:
-            modo_agregacao = st.radio(
-                "👥 Agrupamento",
-                ["Por Conta", "Total Geral"],
-                horizontal=True,
-                key="modo_agregacao"
-            )
-    
+    # Prepara dados
     df_plot = df.copy()
     
-    # Define date_bucket
+    # Define bucket de datas
     if de == ate:
         df_plot["date_bucket"] = df_plot["date_adjusted"].dt.floor("H")
         periodo_label = "Hora"
@@ -611,7 +612,7 @@ def mostrar_dashboard():
             df_plot["date_bucket"] = df_plot["date_adjusted"].dt.to_period("M").astype(str)
             periodo_label = "Mês"
     
-    # Agrupamento e definição de cores
+    # Agrupa dados por período
     if modo_agregacao == "Por Conta":
         vendas_por_data = (
             df_plot.groupby(["date_bucket", "nickname"])["total_amount"]
@@ -636,7 +637,7 @@ def mostrar_dashboard():
         color_seq = ["#27ae60"]
         total_por_conta = None
     
-    # Gráfico de linha principal
+    # Gráfico de linha
     with col1:
         fig = px.line(
             vendas_por_data,
@@ -647,16 +648,12 @@ def mostrar_dashboard():
             color_discrete_sequence=color_seq,
         )
         fig.update_traces(mode="lines+markers", marker=dict(size=5))
-        fig.update_layout(
-            margin=dict(t=20, b=20, l=40, r=10),
-            showlegend=(modo_agregacao == "Por Conta")
-        )
+        fig.update_layout(margin=dict(t=20, b=20, l=40, r=10), showlegend=True)
         st.plotly_chart(fig, use_container_width=True)
     
-    # Gráfico de barra lateral de proporção (somente se for por conta)
-    if modo_agregacao == "Por Conta" and total_por_conta is not None:
-        import plotly.express as px
-    
+    # Gráfico de barra proporcional (somente se "Por Conta")
+    if modo_agregacao == "Por Conta" and not total_por_conta.empty:
+        # Calcula percentual
         total_por_conta["percentual"] = total_por_conta["total"] / total_por_conta["total"].sum()
     
         def formatar_reais(valor):
@@ -673,7 +670,7 @@ def mostrar_dashboard():
             y="percentual",
             color="nickname",
             text="texto",
-            color_discrete_sequence=color_seq,
+            color_discrete_sequence=color_seq
         )
     
         fig_bar.update_layout(
@@ -692,6 +689,7 @@ def mostrar_dashboard():
     
         with col2:
             st.plotly_chart(fig_bar, use_container_width=True)
+
 
 
     # === Gráfico de barras: Média por dia da semana ===
