@@ -470,7 +470,7 @@ def mostrar_dashboard():
     with st.expander("🔍 Filtros Avançados", expanded=False):
         # Atualiza as opções com base nos dados filtrados até aqui
         level1_opcoes = sorted(df["level1"].dropna().unique().tolist())
-        st.markdown("**📂 Filtro: Level1**")
+        st.markdown("**📂 Hierarquia 1**")
         col_l1 = st.columns(4)
         level1_selecionados = []
         for i, op in enumerate(level1_opcoes):
@@ -481,7 +481,7 @@ def mostrar_dashboard():
     
         # Atualiza Level2 após Level1 aplicado
         level2_opcoes = sorted(df["level2"].dropna().unique().tolist())
-        st.markdown("**📁 Filtro: Level2**")
+        st.markdown("**📁 Hierarquia 2**")
         col_l2 = st.columns(4)
         level2_selecionados = []
         for i, op in enumerate(level2_opcoes):
@@ -1164,10 +1164,10 @@ def mostrar_gestao_sku():
     # Filtros
     colf1, colf2, colf3, colf4, colf5 = st.columns([1.2, 1.2, 1.2, 1.2, 2])
     op_sku     = colf1.selectbox("Seller SKU", ["Todos", "Nulo", "Não Nulo"])
-    op_level1  = colf2.selectbox("Level1", ["Todos", "Nulo", "Não Nulo"])
-    op_level2  = colf3.selectbox("Level2", ["Todos", "Nulo", "Não Nulo"])
+    op_level1  = colf2.selectbox("Hierarquia 1", ["Todos", "Nulo", "Não Nulo"])
+    op_level2  = colf3.selectbox("Hierarquia ", ["Todos", "Nulo", "Não Nulo"])
     op_preco   = colf4.selectbox("Preço Unitário", ["Todos", "Nulo", "Não Nulo"])
-    filtro_txt = colf5.text_input("🔎 Pesquisa (MLB, Seller SKU, Level1, Level2)")
+    filtro_txt = colf5.text_input("🔎 Pesquisa (MLB, Seller SKU, Hierarquias)")
 
     # Aplicar filtros
     if op_sku == "Nulo":
