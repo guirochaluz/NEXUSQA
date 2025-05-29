@@ -745,69 +745,63 @@ def mostrar_dashboard():
 
 
 
-    # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
-    st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
-    
-    # Extrai hora e data
-    df["hora"] = df["date_adjusted"].dt.hour
-    df["data"] = df["date_adjusted"].dt.date
-    
-    # Soma o total vendido por hora e por dia
-    vendas_por_dia_e_hora = df.groupby(["data", "hora"])["total_amount"].sum().reset_index()
-    
-    # Garante que todas as horas estejam presentes para todos os dias
-    todos_dias = vendas_por_dia_e_hora["data"].unique()
-    todas_horas = list(range(0, 24))
-    malha_completa = pd.MultiIndex.from_product([todos_dias, todas_horas], names=["data", "hora"])
-    vendas_completa = vendas_por_dia_e_hora.set_index(["data", "hora"]).reindex(malha_completa, fill_value=0).reset_index()
-    
-    # Acumula por hora dentro de cada dia
-    vendas_completa["acumulado_dia"] = vendas_completa.groupby("data")["total_amount"].cumsum()
-    
-    # Agora calcula a média acumulada por hora (entre os dias)
-    media_acumulada_por_hora = (
-        vendas_completa
-        .groupby("hora")["acumulado_dia"]
-        .mean()
-        .reset_index(name="Valor Médio Acumulado")
-    )
-    
-    # Verifica se é filtro de hoje
-    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").date()
-    filtro_hoje = (de == ate) and (de == hoje)
-    
-    if filtro_hoje:
-        hora_atual = pd.Timestamp.now(tz="America/Sao_Paulo").hour
-        df_hoje = df[df["data"] == hoje]
-        vendas_hoje_por_hora = (
-            df_hoje.groupby("hora")["total_amount"].sum().reindex(range(24), fill_value=0)
-            .cumsum()
+        # =================== Gráfico de Linha - Faturamento Acumulado por Hora ===================
+        st.markdown("### ⏰ Faturamento Acumulado por Hora do Dia (Média)")
+        
+        # Extrai hora e data
+        df["hora"] = df["date_adjusted"].dt.hour
+        df["data"] = df["date_adjusted"].dt.date
+        
+        # Soma o total vendido por hora e por dia
+        vendas_por_dia_e_hora = df.groupby(["data", "hora"])["total_amount"].sum().reset_index()
+        
+        # Garante que todas as horas estejam presentes para todos os dias
+        todos_dias = vendas_por_dia_e_hora["data"].unique()
+        todas_horas = list(range(0, 24))
+        malha_completa = pd.MultiIndex.from_product([todos_dias, todas_horas], names=["data", "hora"])
+        vendas_completa = vendas_por_dia_e_hora.set_index(["data", "hora"]).reindex(malha_completa, fill_value=0).reset_index()
+        
+        # Acumula por hora dentro de cada dia
+        vendas_completa["acumulado_dia"] = vendas_completa.groupby("data")["total_amount"].cumsum()
+        
+        # Agora calcula a média acumulada por hora (entre os dias)
+        media_acumulada_por_hora = (
+            vendas_completa
+            .groupby("hora")["acumulado_dia"]
+            .mean()
             .reset_index(name="Valor Médio Acumulado")
-            .rename(columns={"index": "hora"})
         )
-        # Traz o ponto até hora atual
-        ponto_extra = pd.DataFrame([{
-            "hora": hora_atual,
-            "Valor Médio Acumulado": vendas_hoje_por_hora.loc[hora_atual, "Valor Médio Acumulado"]
-        }])
-        media_acumulada_por_hora = pd.concat([media_acumulada_por_hora, ponto_extra]).groupby("hora").last().reset_index()
-    
-    else:
-        # Para histórico, adiciona o ponto final às 23h com média total diária
-        media_final = df.groupby("data")["total_amount"].sum().mean()
-        ponto_final = pd.DataFrame([{
-            "hora": 23,
-            "Valor Médio Acumulado": media_final
-        }])
-        media_acumulada_por_hora = pd.concat([media_acumulada_por_hora, ponto_final]).groupby("hora").last().reset_index()
-    
-    import plotly.graph_objects as go
-    
-    # === Criar colunas para os dois gráficos ===
-    col_hora, col_calor = st.columns([3, 2])
-
-    # 📈 Gráfico de Faturamento Acumulado por Hora (Média por Dia)
-    with col_hora:
+        
+        # Verifica se é filtro de hoje
+        hoje = pd.Timestamp.now(tz="America/Sao_Paulo").date()
+        filtro_hoje = (de == ate) and (de == hoje)
+        
+        if filtro_hoje:
+            hora_atual = pd.Timestamp.now(tz="America/Sao_Paulo").hour
+            df_hoje = df[df["data"] == hoje]
+            vendas_hoje_por_hora = (
+                df_hoje.groupby("hora")["total_amount"].sum().reindex(range(24), fill_value=0)
+                .cumsum()
+                .reset_index(name="Valor Médio Acumulado")
+                .rename(columns={"index": "hora"})
+            )
+            # Traz o ponto até hora atual
+            ponto_extra = pd.DataFrame([{
+                "hora": hora_atual,
+                "Valor Médio Acumulado": vendas_hoje_por_hora.loc[hora_atual, "Valor Médio Acumulado"]
+            }])
+            media_acumulada_por_hora = pd.concat([media_acumulada_por_hora, ponto_extra]).groupby("hora").last().reset_index()
+        
+        else:
+            # Para histórico, adiciona o ponto final às 23h com média total diária
+            media_final = df.groupby("data")["total_amount"].sum().mean()
+            ponto_final = pd.DataFrame([{
+                "hora": 23,
+                "Valor Médio Acumulado": media_final
+            }])
+            media_acumulada_por_hora = pd.concat([media_acumulada_por_hora, ponto_final]).groupby("hora").last().reset_index()
+        
+        # Plota o gráfico
         fig_hora = px.line(
             media_acumulada_por_hora,
             x="hora",
@@ -821,50 +815,8 @@ def mostrar_dashboard():
             markers=True
         )
         fig_hora.update_layout(xaxis=dict(dtick=1))
+        
         st.plotly_chart(fig_hora, use_container_width=True)
-    
-    # 🔥 Mapa de Calor de Vendas por Hora x Dia da Semana
-    with col_calor:
-        dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-        df["dia_semana"] = df["date_adjusted"].dt.day_name().map({
-            "Monday": "Segunda", "Tuesday": "Terça", "Wednesday": "Quarta",
-            "Thursday": "Quinta", "Friday": "Sexta", "Saturday": "Sábado", "Sunday": "Domingo"
-        })
-        tabela_calor = (
-            df.groupby(["dia_semana", "hora"])["total_amount"]
-            .mean()
-            .unstack(fill_value=0)
-            .reindex(index=dias, fill_value=0)
-        )
-        heatmap = go.Heatmap(
-            z=tabela_calor.values,
-            x=tabela_calor.columns,
-            y=tabela_calor.index,
-            colorscale="Viridis",
-            colorbar=dict(title="Média R$")
-        )
-        fig_calor = go.Figure(data=[heatmap])
-        fig_calor.update_layout(
-            title="🔥 Vendas por Hora x Dia da Semana",
-            xaxis_title="Hora do Dia",
-            yaxis_title="Dia da Semana",
-            margin=dict(t=40, l=40, r=40, b=40),
-            plot_bgcolor="#0e1117",
-            paper_bgcolor="#0e1117",
-            font=dict(color="white"),
-            xaxis=dict(showgrid=False, zeroline=False),
-            yaxis=dict(showgrid=False, zeroline=False),
-            coloraxis_colorbar=dict(
-                title="Média R$",
-                tickfont=dict(color="white"),
-                titlefont=dict(color="white")
-            )
-        )
-        st.plotly_chart(fig_calor, use_container_width=True)
-
-
-
-
 
 
 def mostrar_contas_cadastradas():
