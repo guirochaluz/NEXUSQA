@@ -564,7 +564,12 @@ def mostrar_dashboard():
     # =================== Gráfico de Linha + Barra de Proporção ===================
     st.markdown("### 💵 Total Vendido por Período")
     
-    col1, col2 = st.columns([4, 1])  # Gráfico grande (4/5) + barra lateral (1/5)
+    # Ajusta as colunas com base no modo de agregação
+    if modo_agregacao == "Por Conta":
+        col1, col2 = st.columns([4, 1])
+    else:
+        col1 = st.container()
+        col2 = None
     
     with col1:
         tipo_visualizacao = st.radio(
@@ -574,13 +579,14 @@ def mostrar_dashboard():
             key="periodo"
         )
     
-    with col2:
-        modo_agregacao = st.radio(
-            "👥 Agrupamento",
-            ["Por Conta", "Total Geral"],
-            horizontal=True,
-            key="modo_agregacao"
-        )
+    if col2:
+        with col2:
+            modo_agregacao = st.radio(
+                "👥 Agrupamento",
+                ["Por Conta", "Total Geral"],
+                horizontal=True,
+                key="modo_agregacao"
+            )
     
     df_plot = df.copy()
     
@@ -628,7 +634,7 @@ def mostrar_dashboard():
         )
         color_dim = None
         color_seq = ["#27ae60"]
-        total_por_conta = None  # não mostra gráfico lateral nesse caso
+        total_por_conta = None
     
     # Gráfico de linha principal
     with col1:
@@ -641,30 +647,51 @@ def mostrar_dashboard():
             color_discrete_sequence=color_seq,
         )
         fig.update_traces(mode="lines+markers", marker=dict(size=5))
-        fig.update_layout(margin=dict(t=20, b=20, l=40, r=10), showlegend=True)
-    
+        fig.update_layout(
+            margin=dict(t=20, b=20, l=40, r=10),
+            showlegend=(modo_agregacao == "Por Conta")
+        )
         st.plotly_chart(fig, use_container_width=True)
     
-    # Gráfico de barra lateral proporcional por conta
-    with col2:
-        if modo_agregacao == "Por Conta" and not total_por_conta.empty:
-            fig_bar = px.bar(
-                total_por_conta,
-                x="total",
-                y="nickname",
-                orientation="h",
-                color="nickname",
-                color_discrete_sequence=color_seq,
-            )
-            fig_bar.update_layout(
-                xaxis=dict(visible=False),
-                yaxis=dict(title=None),
-                showlegend=False,
-                margin=dict(t=20, b=20, l=10, r=10),
-                height=fig.layout.height,
-            )
+    # Gráfico de barra lateral de proporção (somente se for por conta)
+    if modo_agregacao == "Por Conta" and total_por_conta is not None:
+        import plotly.express as px
+    
+        total_por_conta["percentual"] = total_por_conta["total"] / total_por_conta["total"].sum()
+    
+        def formatar_reais(valor):
+            return f"R$ {valor:,.0f}".replace(",", "v").replace(".", ",").replace("v", ".")
+    
+        total_por_conta["texto"] = total_por_conta.apply(
+            lambda row: f"{row['percentual']:.0%} ({formatar_reais(row['total'])})", axis=1
+        )
+        total_por_conta["grupo"] = "Contas"
+    
+        fig_bar = px.bar(
+            total_por_conta,
+            x="grupo",
+            y="percentual",
+            color="nickname",
+            text="texto",
+            color_discrete_sequence=color_seq,
+        )
+    
+        fig_bar.update_layout(
+            yaxis=dict(title=None, tickformat=".0%", range=[0, 1]),
+            xaxis=dict(title=None),
+            showlegend=False,
+            margin=dict(t=20, b=20, l=10, r=10),
+            height=400
+        )
+    
+        fig_bar.update_traces(
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(color="white", size=12)
+        )
+    
+        with col2:
             st.plotly_chart(fig_bar, use_container_width=True)
-
 
 
     # === Gráfico de barras: Média por dia da semana ===
