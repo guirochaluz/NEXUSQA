@@ -1180,12 +1180,64 @@ def mostrar_gestao_sku():
                          or filtro_txt in str(row["level1"]).lower()
                          or filtro_txt in str(row["level2"]).lower(), axis=1)]
 
-    # Tabela
-    st.markdown("### 📊 Diagnóstico de Cadastro de SKU por Produto (MLB)")
-    if df.empty:
-        st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
-    else:
-        st.dataframe(df, use_container_width=True)
+    # 🔄 Tabela editável
+    st.markdown("### 📝 Editar Cadastro de SKUs")
+    
+    # Permitir edição apenas nestas colunas
+    colunas_editaveis = ["seller_sku", "level1", "level2", "custo_unitario", "quantity_sku"]
+    
+    df_editado = st.data_editor(
+        df,
+        use_container_width=True,
+        disabled=[col for col in df.columns if col not in colunas_editaveis],
+        num_rows="dynamic",
+        key="editor_sku"
+    )
+    
+    # Salvar alterações no banco
+    if st.button("💾 Salvar Alterações"):
+        try:
+            with engine.begin() as conn:
+                for _, row in df_editado.iterrows():
+                    conn.execute(text("""
+                        INSERT INTO sku (sku, level1, level2, custo_unitario, quantity, date_created)
+                        VALUES (:sku, :level1, :level2, :custo, :quantidade, NOW())
+                        ON CONFLICT (sku) DO UPDATE
+                        SET
+                            level1 = EXCLUDED.level1,
+                            level2 = EXCLUDED.level2,
+                            custo_unitario = EXCLUDED.custo_unitario,
+                            quantity = EXCLUDED.quantity
+                    """), {
+                        "sku": row["seller_sku"],
+                        "level1": row["level1"],
+                        "level2": row["level2"],
+                        "custo": row["custo_unitario"],
+                        "quantidade": row["quantity_sku"]
+                    })
+    
+                # Atualizar tabela de vendas com os dados mais recentes da SKU
+                conn.execute(text("""
+                    UPDATE sales s
+                    SET
+                        level1 = sku.level1,
+                        level2 = sku.level2,
+                        custo_unitario = sku.custo_unitario,
+                        quantity_sku = sku.quantity
+                    FROM (
+                        SELECT DISTINCT ON (sku) * FROM sku
+                        ORDER BY sku, date_created DESC
+                    ) sku
+                    WHERE s.seller_sku = sku.sku
+                """))
+    
+            st.success("✅ Alterações salvas com sucesso!")
+            st.session_state["atualizar_gestao_sku"] = True
+            st.rerun()
+    
+        except Exception as e:
+            st.error(f"❌ Erro ao salvar alterações: {e}")
+
 
     # 5️⃣ Atualização da base SKU via planilha
     st.markdown("---")
