@@ -1450,46 +1450,54 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.warning("Nenhuma venda encontrada.")
         return
 
-    # Converte a data de postagem limite para datetime
+    # Converte campos de data
     df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"])
+    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
+    df["dias_restantes"] = (df["shipment_delivery_limit"].dt.normalize() - hoje).dt.days
+
+    # Cria a coluna de quantidade total
+    df["quantidade"] = df["quantity"] * df["quantity_sku"].fillna(0)
 
     # === FILTROS ===
-    col1, col2, col3, col4 = st.columns(4)
-    
-    filtro_nickname = col1.selectbox("🧾 Nickname", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
-    filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
-    filtro_modo_envio = col3.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["shipment_mode"].dropna().unique().tolist()))
-    filtro_data = col4.date_input("📆 Postagem Limite", [])
+    filtro_nickname = st.multiselect("👤 Nickname", sorted(df["nickname"].dropna().unique().tolist()))
+    filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
+    filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["shipment_logistic_type"].dropna().unique().tolist()))
+    filtro_data = st.date_input("📆 Postagem Limite", [])
 
     # === APLICAÇÃO DOS FILTROS ===
-    if filtro_nickname != "Todos":
-        df = df[df["nickname"] == filtro_nickname]
-    if filtro_hierarquia != "Todos":
-        df = df[df["level1"] == filtro_hierarquia]
+    if filtro_nickname:
+        df = df[df["nickname"].isin(filtro_nickname)]
+    if filtro_hierarquia:
+        df = df[df["level1"].isin(filtro_hierarquia)]
     if filtro_modo_envio != "Todos":
-        df = df[df["shipment_mode"] == filtro_modo_envio]
+        df = df[df["shipment_logistic_type"] == filtro_modo_envio]
     if filtro_data and len(filtro_data) == 2:
         de, ate = filtro_data
         df = df[(df["shipment_delivery_limit"] >= pd.to_datetime(de)) & (df["shipment_delivery_limit"] <= pd.to_datetime(ate))]
 
     # === TABELA FINAL ===
-    df["quantidade_venda"] = df["quantity"] * df["quantity_sku"].fillna(0)
-
     tabela = df[[
-        "shipment_receiver_name",
-        "quantidade_venda",
-        "quantity_sku",
+        "nickname",
         "level1",
+        "shipment_logistic_type",
+        "shipment_receiver_name",
+        "quantidade",
         "seller_sku",
-        "shipment_delivery_limit"
+        "shipment_delivery_limit",
+        "dias_restantes"
     ]].rename(columns={
-        "shipment_receiver_name": "Nome",
-        "quantidade_venda": "Quant. da Venda",
-        "quantity_sku": "Quant. do SKU",
+        "nickname": "Nickname",
         "level1": "Hierarquia 1",
+        "shipment_logistic_type": "Modo de Envio",
+        "shipment_receiver_name": "Nome",
+        "quantidade": "Quantidade",
         "seller_sku": "SKU",
-        "shipment_delivery_limit": "Postagem Limite"
+        "shipment_delivery_limit": "Postagem Limite",
+        "dias_restantes": "Dias Restantes"
     })
+
+    # Ordena por postagem mais próxima
+    tabela = tabela.sort_values(by=["Dias Restantes", "Postagem Limite"])
 
     st.dataframe(tabela, use_container_width=True)
 
