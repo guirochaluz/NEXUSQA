@@ -24,8 +24,8 @@ ML_CLIENT_ID   = os.getenv("ML_CLIENT_ID")
 # 2) Agora sim importe o Streamlit e configure a página _antes_ de qualquer outra chamada st.*
 import streamlit as st
 st.set_page_config(
-    page_title="Sistema de Gestão - NEXUS",
-    page_icon="📊",
+    page_title="NEXUS Group",
+    page_icon="favicon.png",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
