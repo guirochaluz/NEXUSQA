@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Inicia FastAPI (porta 8000)
-uvicorn api:app --host 0.0.0.0 --port 8000 &
+# Inicia FastAPI na porta 8501 (em segundo plano)
+uvicorn api:app --host 0.0.0.0 --port 8501 &
 
-# Inicia Streamlit (porta 8501)
-streamlit run app.py --server.port 8501 --server.address=0.0.0.0 --server.enableXsrfProtection false
+# Inicia Streamlit na porta 8000 (será a pública)
+streamlit run app.py --server.port 8000 --server.address=0.0.0.0 --server.enableXsrfProtection false
+
