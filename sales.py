@@ -313,7 +313,19 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         payment_id = payment_info.get("id")
         marketplace_fee = payment_info.get("marketplace_fee")
 
-        print(f"✅ Finalizando order {order_id} | ml_fee: {marketplace_fee}")
+        # 📦 Enriquecimento logístico
+        shipment_id = ship.get("id")
+        shipment_data = {}
+        if shipment_id:
+            try:
+                shipment_resp = requests.get(
+                    f"https://api.mercadolibre.com/shipments/{shipment_id}?access_token={access_token}"
+                )
+                shipment_resp.raise_for_status()
+                shipment_data = shipment_resp.json()
+                print(f"📮 Dados logísticos carregados para order {order_id}")
+            except Exception as e:
+                print(f"⚠️ Falha ao buscar shipment {shipment_id}: {e}")
 
         return Sale(
             order_id         = str(order_id),
@@ -327,7 +339,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             item_title       = item_inf.get("title"),
             quantity         = item.get("quantity"),
             unit_price       = item.get("unit_price"),
-            shipping_id      = ship.get("id"),
+            shipping_id      = shipment_id,
             seller_sku       = seller_sku,
             quantity_sku     = quantity_sku,
             custo_unitario   = custo_unitario,
@@ -335,11 +347,25 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             level2           = level2,
             ml_fee           = marketplace_fee,
             payment_id       = payment_id,
+
+            # 🔽 Novos campos de shipment
+            shipment_status             = shipment_data.get("status"),
+            shipment_substatus          = shipment_data.get("substatus"),
+            shipment_last_updated       = parser.isoparse(shipment_data["last_updated"]) if shipment_data.get("last_updated") else None,
+            shipment_first_printed      = parser.isoparse(shipment_data["date_first_printed"]) if shipment_data.get("date_first_printed") else None,
+            shipment_mode               = shipment_data.get("mode"),
+            shipment_logistic_type      = shipment_data.get("logistic_type"),
+            shipment_list_cost          = shipment_data.get("shipping_option", {}).get("list_cost"),
+            shipment_delivery_type      = shipment_data.get("shipping_option", {}).get("delivery_type"),
+            shipment_delivery_limit     = parser.isoparse(shipment_data["shipping_option"]["estimated_delivery_limit"]["date"]) if shipment_data.get("shipping_option", {}).get("estimated_delivery_limit", {}).get("date") else None,
+            shipment_delivery_final     = parser.isoparse(shipment_data["shipping_option"]["estimated_delivery_final"]["date"]) if shipment_data.get("shipping_option", {}).get("estimated_delivery_final", {}).get("date") else None,
+            shipment_receiver_name      = shipment_data.get("receiver_address", {}).get("receiver_name"),
         )
 
     finally:
         if internal_session:
             db.close()
+
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     from datetime import datetime, timedelta
