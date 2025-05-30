@@ -1420,7 +1420,6 @@ def mostrar_gestao_sku():
 def mostrar_expedicao_logistica():
     import pandas as pd
     from datetime import datetime
-    from utils import carregar_vendas
 
     st.markdown(
         """
