@@ -1528,6 +1528,8 @@ def mostrar_painel_metas():
 if "code" in st.query_params:
     ml_callback()
 
+df_vendas = carregar_vendas()
+
 pagina = render_sidebar()
 if pagina == "Dashboard":
     mostrar_dashboard()
