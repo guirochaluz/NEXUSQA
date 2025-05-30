@@ -247,8 +247,13 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
     from models import Sale
     from db import SessionLocal
     from sqlalchemy import text
-    from dateutil import parser
+    from dateutil import parser, tz
     import requests
+
+    def to_sp_datetime(value: Optional[str]):
+        if not value:
+            return None
+        return parser.isoparse(value).astimezone(tz.gettz("America/Sao_Paulo"))
 
     internal_session = False
     if db is None:
@@ -269,7 +274,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         except Exception as e:
             print(f"⚠️ Erro ao complementar order {order_id}: {e}")
 
-        # 🔍 Fallback para buscar payments, se necessário
+        # 🔍 Fallback para buscar payments
         payments = order.get("payments")
         if not payments:
             try:
@@ -286,13 +291,11 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             except Exception as e:
                 print(f"❌ Erro ao buscar payments em fallback: {e}")
 
-        # Dados principais da venda
         buyer = order.get("buyer", {}) or {}
         item = (order.get("order_items") or [{}])[0]
         item_inf = item.get("item", {}) or {}
         ship = order.get("shipping") or {}
 
-        # SKU e metadados complementares
         seller_sku = item_inf.get("seller_sku")
         quantity_sku = custo_unitario = level1 = level2 = None
 
@@ -308,12 +311,11 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             if sku_info:
                 quantity_sku, custo_unitario, level1, level2 = sku_info
 
-        # Taxas
         payment_info = (order.get("payments") or [{}])[0]
         payment_id = payment_info.get("id")
         marketplace_fee = payment_info.get("marketplace_fee")
 
-        # 📦 Enriquecimento logístico
+        # 📦 Shipment enrichment
         shipment_id = ship.get("id")
         shipment_data = {}
         if shipment_id:
@@ -334,7 +336,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             buyer_nickname   = buyer.get("nickname"),
             total_amount     = order.get("total_amount"),
             status           = order.get("status"),
-            date_closed      = parser.isoparse(order.get("date_closed")),
+            date_closed      = to_sp_datetime(order.get("date_closed")),
             item_id          = item_inf.get("id"),
             item_title       = item_inf.get("title"),
             quantity         = item.get("quantity"),
@@ -348,23 +350,24 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             ml_fee           = marketplace_fee,
             payment_id       = payment_id,
 
-            # 🔽 Novos campos de shipment
+            # 🆕 Dados de envio
             shipment_status             = shipment_data.get("status"),
             shipment_substatus          = shipment_data.get("substatus"),
-            shipment_last_updated       = parser.isoparse(shipment_data["last_updated"]) if shipment_data.get("last_updated") else None,
-            shipment_first_printed      = parser.isoparse(shipment_data["date_first_printed"]) if shipment_data.get("date_first_printed") else None,
+            shipment_last_updated       = to_sp_datetime(shipment_data.get("last_updated")),
+            shipment_first_printed      = to_sp_datetime(shipment_data.get("date_first_printed")),
             shipment_mode               = shipment_data.get("mode"),
             shipment_logistic_type      = shipment_data.get("logistic_type"),
             shipment_list_cost          = shipment_data.get("shipping_option", {}).get("list_cost"),
             shipment_delivery_type      = shipment_data.get("shipping_option", {}).get("delivery_type"),
-            shipment_delivery_limit     = parser.isoparse(shipment_data["shipping_option"]["estimated_delivery_limit"]["date"]) if shipment_data.get("shipping_option", {}).get("estimated_delivery_limit", {}).get("date") else None,
-            shipment_delivery_final     = parser.isoparse(shipment_data["shipping_option"]["estimated_delivery_final"]["date"]) if shipment_data.get("shipping_option", {}).get("estimated_delivery_final", {}).get("date") else None,
+            shipment_delivery_limit     = to_sp_datetime(shipment_data.get("shipping_option", {}).get("estimated_delivery_limit", {}).get("date")),
+            shipment_delivery_final     = to_sp_datetime(shipment_data.get("shipping_option", {}).get("estimated_delivery_final", {}).get("date")),
             shipment_receiver_name      = shipment_data.get("receiver_address", {}).get("receiver_name"),
         )
 
     finally:
         if internal_session:
             db.close()
+
 
 
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
