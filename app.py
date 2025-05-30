@@ -1418,6 +1418,10 @@ def mostrar_gestao_sku():
 
 
 def mostrar_expedicao_logistica():
+    import pandas as pd
+    from datetime import datetime
+    from utils import carregar_vendas
+
     st.markdown(
         """
         <style>
@@ -1428,8 +1432,66 @@ def mostrar_expedicao_logistica():
         """,
         unsafe_allow_html=True,
     )
+
     st.header("🚚 Expedição e Logística")
-    st.info("Em breve...")
+
+    df = carregar_vendas()
+    if df.empty:
+        st.warning("Nenhum dado encontrado.")
+        return
+
+    # Filtros
+    col1, col2, col3 = st.columns(3)
+    filtro_nickname = col1.selectbox("👤 Nickname:", ["Todos"] + sorted(df["buyer_nickname"].dropna().unique().tolist()))
+    filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
+    filtro_modo_envio = col3.selectbox("🚛 Modo de Envio:", ["Todos"] + sorted(df["shipment_mode"].dropna().unique().tolist()))
+
+    # Aplicar filtros
+    if filtro_nickname != "Todos":
+        df = df[df["buyer_nickname"] == filtro_nickname]
+    if filtro_hierarquia != "Todos":
+        df = df[df["level1"] == filtro_hierarquia]
+    if filtro_modo_envio != "Todos":
+        df = df[df["shipment_mode"] == filtro_modo_envio]
+
+    # Filtrar vendas com data de entrega válida
+    df = df[df["shipment_delivery_limit"].notnull()].copy()
+    df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"])
+
+    # Calcular quantidade total
+    df["Quantidade"] = df["quantity"] * df["quantity_sku"].fillna(1)
+
+    # Link para o anúncio
+    df["SKU"] = df["item_id"].apply(
+        lambda x: f"[🔗 Anúncio](https://www.mercadolivre.com.br/anuncio/{x})" if pd.notnull(x) else ""
+    )
+
+    df["Data da Postagem"] = df["shipment_delivery_limit"].dt.strftime("%d/%m/%Y")
+
+    # Renomear colunas para exibição
+    df_exibir = df.rename(columns={
+        "buyer_nickname": "Nickname",
+        "shipment_receiver_name": "Nome",
+        "level1": "Hierarquia 1",
+        "shipment_mode": "Modo de Envio"
+    })[[
+        "Data da Postagem", "Nome", "Nickname", "Quantidade", "Hierarquia 1", "SKU", "Modo de Envio"
+    ]]
+
+    # Agrupamento por data
+    for data, grupo in df_exibir.groupby("Data da Postagem"):
+        st.subheader(f"📦 Postagem em {data}")
+        st.dataframe(grupo.reset_index(drop=True), use_container_width=True)
+
+    # Exportação completa
+    csv = df_exibir.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="⬇️ Exportar CSV da Expedição",
+        data=csv,
+        file_name="expedicao_logistica.csv",
+        mime="text/csv"
+    )
+
 
 def mostrar_gestao_despesas():
     st.markdown(
