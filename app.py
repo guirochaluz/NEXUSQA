@@ -1440,86 +1440,59 @@ def mostrar_gestao_sku():
                     st.error(f"❌ Erro ao processar: {e}")
 
 
-def mostrar_expedicao_logistica(df):
-    st.markdown("""
-        <style>
-        .block-container {
-            padding-top: 0rem;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+def mostrar_expedicao_logistica(df: pd.DataFrame):
+    import streamlit as st
+    import pandas as pd
 
-    st.header("🚚 Expedição e Logística")
+    st.markdown("<h3>🚚 Expedição e Logística</h3>", unsafe_allow_html=True)
 
-    # ==================== PRÉ-PROCESSAMENTO ====================
-    df = df.copy()
-    df["postagem_limite"] = pd.to_datetime(df["shipping_option.estimated_delivery_limit.date"], errors="coerce")
-    df["dias_restantes"] = (df["postagem_limite"] - pd.to_datetime(datetime.now().date())).dt.days
-    df["quant_venda"] = df["quantity"] * df["quantity_sku"]
+    if df.empty:
+        st.warning("Nenhuma venda encontrada.")
+        return
+
+    # Converte a data de postagem limite para datetime
+    df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"])
+
+    # === FILTROS ===
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Indicador de urgência com emoji
-    def indicar_urgencia(dias):
-        if pd.isnull(dias):
-            return "❓"
-        elif dias < 0:
-            return "🚨 Atrasado"
-        elif dias == 0:
-            return "⚠️ Hoje"
-        elif dias <= 2:
-            return "⚠️ Urgente"
-        else:
-            return "✅ Ok"
+    filtro_nickname = col1.selectbox("🧾 Nickname", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
+    filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
+    filtro_modo_envio = col3.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["shipment_mode"].dropna().unique().tolist()))
+    filtro_data = col4.date_input("📆 Postagem Limite", [])
 
-    df["urgência"] = df["dias_restantes"].apply(indicar_urgencia)
+    # === APLICAÇÃO DOS FILTROS ===
+    if filtro_nickname != "Todos":
+        df = df[df["nickname"] == filtro_nickname]
+    if filtro_hierarquia != "Todos":
+        df = df[df["level1"] == filtro_hierarquia]
+    if filtro_modo_envio != "Todos":
+        df = df[df["shipment_mode"] == filtro_modo_envio]
+    if filtro_data and len(filtro_data) == 2:
+        de, ate = filtro_data
+        df = df[(df["shipment_delivery_limit"] >= pd.to_datetime(de)) & (df["shipment_delivery_limit"] <= pd.to_datetime(ate))]
 
-    # ==================== FILTROS ====================
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        nickname_filtrado = st.multiselect("Filtrar por nickname", options=sorted(df["nickname"].dropna().unique()))
-    with col2:
-        hierarquia_filtrada = st.multiselect("Filtrar por Hierarquia 1", options=sorted(df["level1"].dropna().unique()))
-    with col3:
-        data_limite = st.date_input("Filtrar por Postagem até", value=None)
+    # === TABELA FINAL ===
+    df["quantidade_venda"] = df["quantity"] * df["quantity_sku"].fillna(0)
 
-    busca = st.text_input("🔍 Buscar por nome do destinatário ou SKU:")
-
-    if nickname_filtrado:
-        df = df[df["nickname"].isin(nickname_filtrado)]
-    if hierarquia_filtrada:
-        df = df[df["level1"].isin(hierarquia_filtrada)]
-    if data_limite:
-        df = df[df["postagem_limite"] <= pd.to_datetime(data_limite)]
-    if busca:
-        busca = busca.lower()
-        df = df[df["receiver_name"].str.lower().str.contains(busca) | df["seller_sku"].str.lower().str.contains(busca)]
-
-    # ==================== TABELA FINAL ====================
     tabela = df[[
-        "receiver_name", "quant_venda", "quantity_sku", "level1", "seller_sku",
-        "postagem_limite", "dias_restantes", "logistic_type", "urgência"
+        "shipment_receiver_name",
+        "quantidade_venda",
+        "quantity_sku",
+        "level1",
+        "seller_sku",
+        "shipment_delivery_limit"
     ]].rename(columns={
-        "receiver_name": "Nome",
-        "quant_venda": "Quant. da venda",
+        "shipment_receiver_name": "Nome",
+        "quantidade_venda": "Quant. da Venda",
         "quantity_sku": "Quant. do SKU",
         "level1": "Hierarquia 1",
         "seller_sku": "SKU",
-        "postagem_limite": "Postagem limite",
-        "dias_restantes": "Dias restantes",
-        "logistic_type": "Tipo logística",
-        "urgência": "Urgência"
+        "shipment_delivery_limit": "Postagem Limite"
     })
 
     st.dataframe(tabela, use_container_width=True)
 
-    # ==================== EXPORTAR PARA EXCEL ====================
-    def to_excel_bytes(df_export):
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_export.to_excel(writer, index=False, sheet_name="Expedicao")
-        return buffer.getvalue()
-
-    excel_data = to_excel_bytes(tabela)
-    st.download_button("📥 Exportar para Excel", data=excel_data, file_name="expedicao_logistica.xlsx")
 
 
 def mostrar_gestao_despesas():
