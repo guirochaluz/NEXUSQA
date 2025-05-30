@@ -1536,7 +1536,7 @@ elif pagina == "Contas Cadastradas":
 elif pagina == "Relatórios":
     mostrar_relatorios()
 elif pagina == "Expedição e Logística":
-    mostrar_expedicao_logistica(df_vendas_enriquecido)
+    mostrar_expedicao_logistica(df_vendas)
 elif pagina == "Gestão de SKU":
     mostrar_gestao_sku()
 elif pagina == "Gestão de Despesas":
