@@ -185,13 +185,25 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.ml_fee,
                    s.level1,
                    s.level2,
+                   s.ads,
+                   s.payment_id,
+                   s.shipment_status,
+                   s.shipment_substatus,
+                   s.shipment_last_updated,
+                   s.shipment_first_printed,
+                   s.shipment_mode,
+                   s.shipment_logistic_type,
+                   s.shipment_list_cost,
+                   s.shipment_delivery_type,
+                   s.shipment_delivery_limit,
+                   s.shipment_delivery_final,
+                   s.shipment_receiver_name,
                    u.nickname
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
              WHERE s.ml_user_id = :uid
         """)
         df = pd.read_sql(sql, engine, params={"uid": conta_id})
-
     else:
         sql = text("""
             SELECT s.order_id,
@@ -210,6 +222,19 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
                    s.ml_fee,
                    s.level1,
                    s.level2,
+                   s.ads,
+                   s.payment_id,
+                   s.shipment_status,
+                   s.shipment_substatus,
+                   s.shipment_last_updated,
+                   s.shipment_first_printed,
+                   s.shipment_mode,
+                   s.shipment_logistic_type,
+                   s.shipment_list_cost,
+                   s.shipment_delivery_type,
+                   s.shipment_delivery_limit,
+                   s.shipment_delivery_final,
+                   s.shipment_receiver_name,
                    u.nickname
               FROM sales s
               LEFT JOIN user_tokens u ON s.ml_user_id = u.ml_user_id
@@ -217,8 +242,6 @@ def carregar_vendas(conta_id: Optional[str] = None) -> pd.DataFrame:
         df = pd.read_sql(sql, engine)
 
     return df
-
-
 
 # ----------------- Componentes de Interface -----------------
 def render_add_account_button():
