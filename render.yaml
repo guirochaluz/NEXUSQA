@@ -14,8 +14,10 @@ services:
       - key: ML_CLIENT_SECRET
         value: "sZOG7DCPZzQhWbqSn4ii6UJx4upEzQMd"
       - key: BACKEND_URL
-        value: "https://nexusgroup.online/api"
+        value: "http://localhost:8501"
       - key: FRONTEND_URL
-        value: "https://nexusgroup.online"
+        value: "https://nexusqa.onrender.com"
       - key: WEB_PASSWORD
         value: "Giguisa*"
+      - key: COOKIE_SECRET
+        value: "lYXk6saqrn957gFS56qT-zlZdTdASs6_KKykWMYukJ8"
