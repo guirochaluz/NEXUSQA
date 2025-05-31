@@ -1444,9 +1444,21 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     import streamlit as st
     import pandas as pd
 
+    # Remove o espaçamento superior
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown("<h3>📦 Expedição</h3>", unsafe_allow_html=True)
 
-    if df.empty:
+        if df.empty:
         st.warning("Nenhuma venda encontrada.")
         return
 
@@ -1458,10 +1470,21 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     # Cria a coluna de quantidade total
     df["quantidade"] = df["quantity"] * df["quantity_sku"].fillna(0)
 
+    # Aplica a transformação de logistic_type
+    mapa_logistic = {
+        "fulfillment": "FULL",
+        "self_service": "FLEX",
+        "drop_off": "Agência/Correios",
+        "xd_drop_off": "Agência/Correios",
+        "cross_docking": "Coleta",
+        "me2": "Envio Padrão"
+    }
+    df["logistic_tipo"] = df["shipment_logistic_type"].map(mapa_logistic).fillna("outros")
+
     # === FILTROS ===
     filtro_nickname = st.multiselect("👤 Nickname", sorted(df["nickname"].dropna().unique().tolist()))
     filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
-    filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["shipment_logistic_type"].dropna().unique().tolist()))
+    filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
     filtro_data = st.date_input("📆 Postagem Limite", [])
 
     # === APLICAÇÃO DOS FILTROS ===
@@ -1470,7 +1493,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     if filtro_hierarquia:
         df = df[df["level1"].isin(filtro_hierarquia)]
     if filtro_modo_envio != "Todos":
-        df = df[df["shipment_logistic_type"] == filtro_modo_envio]
+        df = df[df["logistic_tipo"] == filtro_modo_envio]
     if filtro_data and len(filtro_data) == 2:
         de, ate = filtro_data
         df = df[(df["shipment_delivery_limit"] >= pd.to_datetime(de)) & (df["shipment_delivery_limit"] <= pd.to_datetime(ate))]
@@ -1479,28 +1502,29 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     tabela = df[[
         "nickname",
         "level1",
-        "shipment_logistic_type",
+        "logistic_tipo",
         "shipment_receiver_name",
         "quantidade",
         "seller_sku",
         "shipment_delivery_limit",
-        "dias_restantes"
+        "dias_restantes",
+        "order_id"
     ]].rename(columns={
         "nickname": "Nickname",
         "level1": "Hierarquia 1",
-        "shipment_logistic_type": "Modo de Envio",
+        "logistic_tipo": "Modo de Envio",
         "shipment_receiver_name": "Nome",
         "quantidade": "Quantidade",
         "seller_sku": "SKU",
         "shipment_delivery_limit": "Postagem Limite",
-        "dias_restantes": "Dias Restantes"
+        "dias_restantes": "Dias Restantes",
+        "order_id": "Order ID"
     })
 
     # Ordena por postagem mais próxima
     tabela = tabela.sort_values(by=["Dias Restantes", "Postagem Limite"])
 
     st.dataframe(tabela, use_container_width=True)
-
 
 
 def mostrar_gestao_despesas():
