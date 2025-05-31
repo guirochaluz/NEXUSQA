@@ -277,7 +277,7 @@ def render_sidebar():
                 "Dashboard",
                 "Contas Cadastradas",
                 "Relatórios",
-                "Expedição e Logística",
+                "Expedição",
                 "Gestão de SKU",
                 "Gestão de Despesas",
                 "Painel de Metas",
@@ -286,9 +286,9 @@ def render_sidebar():
             ],
             icons=[
                 "house",
-                "collection",
+                "person-up",
                 "file-earmark-text",
-                "truck",
+                "collection-fill",
                 "box-seam",
                 "currency-dollar",
                 "bar-chart-line",
@@ -300,7 +300,7 @@ def render_sidebar():
                 "Dashboard",
                 "Contas Cadastradas",
                 "Relatórios",
-                "Expedição e Logística",
+                "Expedição",
                 "Gestão de SKU",
                 "Gestão de Despesas",
                 "Painel de Metas",
@@ -1444,7 +1444,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     import streamlit as st
     import pandas as pd
 
-    st.markdown("<h3>🚚 Expedição e Logística</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>📦 Expedição</h3>", unsafe_allow_html=True)
 
     if df.empty:
         st.warning("Nenhuma venda encontrada.")
@@ -1545,7 +1545,7 @@ elif pagina == "Contas Cadastradas":
     mostrar_contas_cadastradas()
 elif pagina == "Relatórios":
     mostrar_relatorios()
-elif pagina == "Expedição e Logística":
+elif pagina == "Expedição":
     mostrar_expedicao_logistica(df_vendas)
 elif pagina == "Gestão de SKU":
     mostrar_gestao_sku()
