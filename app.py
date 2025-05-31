@@ -1452,7 +1452,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     # Converte campos de data
     df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"])
-    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
+    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None)
     df["dias_restantes"] = (df["shipment_delivery_limit"].dt.normalize() - hoje).dt.days
 
     # Cria a coluna de quantidade total
