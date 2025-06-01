@@ -1559,50 +1559,33 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     st.plotly_chart(fig_bar, use_container_width=True)
 
 
-    # === TABELA FINAL ===
-    tabela = df[[
-        "nickname", "logistic_tipo", "quantidade", "level1",
-        "shipment_delivery_limit", "dias_restantes", "seller_sku"
-    ]].rename(columns={
-        "nickname": "Conta",
-        "logistic_tipo": "Modo de Envio",
-        "quantidade": "Quantidade",
-        "level1": "Hierarquia 1",
-        "shipment_delivery_limit": "Postagem Limite",
-        "dias_restantes": "Dias Restantes",
-        "seller_sku": "SKU"
-    }).sort_values(by=["Dias Restantes", "Postagem Limite"])
-
-    tabela["Postagem Limite"] = tabela["Postagem Limite"].dt.date
-
-    st.markdown("### 📋 Tabela de Expedição")
-    st.dataframe(tabela, use_container_width=True, height=1000)
-
     # === PDF ===
     def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
         from reportlab.lib.utils import ImageReader
-
+    
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
         elementos = []
-
-        # Logo e título lado a lado
+    
+        # Logo + título lado a lado
         logo = RLImage("favicon.png", width=30, height=30)
-        titulo = Paragraph("Relatório de Expedição - NEXUS", styles['Title'])
+        titulo = Paragraph("<b>Relatório de Expedição - NEXUS</b>", styles["Title"])
+        elementos.append(Table([[logo, titulo]], colWidths=[35, 450], style=[
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ]))
         elementos.append(Spacer(1, 12))
-        elementos.append(titulo)
-        elementos.append(logo)
-        elementos.append(Spacer(1, 12))
-
-        # Exporta gráfico para imagem
+    
+        # Exporta gráfico plotly como imagem
         img_buf = BytesIO()
         fig_img = grafico_plotly.to_image(format="png")
         img_buf.write(fig_img)
         img_buf.seek(0)
-        elementos.append(RLImage(img_buf, width=400, height=200))
+        elementos.append(RLImage(img_buf, width=450, height=250))
         elementos.append(Spacer(1, 12))
-
+    
         # Tabela
         dados = [tabela_df.columns.tolist()] + tabela_df.astype(str).values.tolist()
         t = Table(dados, repeatRows=1)
@@ -1614,16 +1597,19 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             ('FONTSIZE', (0, 0), (-1, -1), 7),
         ]))
         elementos.append(t)
-
+    
         doc.build(elementos)
         buffer.seek(0)
         b64 = b64encode(buffer.read()).decode()
         return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
-
-        href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
-        col_download, col_vazio = st.columns([0.85, 0.15])
-        with col_vazio:
+    
+    
+    # === BOTÃO PDF FORA DA FUNÇÃO
+    href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
+    col_download, col_vazio = st.columns([0.85, 0.15])
+    with col_vazio:
         st.markdown(href_pdf, unsafe_allow_html=True)
+
 
 
 def mostrar_gestao_despesas():
