@@ -1442,19 +1442,20 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     import streamlit as st
     import pandas as pd
     import matplotlib.pyplot as plt
-    import seaborn as sns
     from io import BytesIO
     from base64 import b64encode
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import inch
     from reportlab.lib import colors
+    from datetime import datetime
+    import plotly.express as px
 
     st.markdown("""
         <style>
         .block-container { padding-top: 0rem; }
         .stDataFrame thead tr th { position: sticky; top: 0; background-color: #f0f2f6; z-index: 1; }
+        .css-1kyxreq, .css-1v0mbdj { width: 100% !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -1466,7 +1467,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"], errors="coerce")
     df = df[df["shipment_delivery_limit"].notna()]
-    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_localize("UTC", ambiguous='NaT').dt.tz_convert("America/Sao_Paulo").dt.normalize()
+    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.normalize()
     hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
     df["dias_restantes"] = (df["shipment_delivery_limit"] - hoje).dt.days
     df["quantidade"] = df["quantity"] * df["quantity_sku"].fillna(0)
@@ -1522,26 +1523,22 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     with col2:
         filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
     with col3:
-        filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
+        filtro_sku = st.multiselect("🧾 SKU", sorted(df["seller_sku"].dropna().unique().tolist()))
 
     if filtro_nickname:
         df = df[df["nickname"].isin(filtro_nickname)]
     if filtro_hierarquia:
         df = df[df["level1"].isin(filtro_hierarquia)]
-    if filtro_modo_envio != "Todos":
-        df = df[df["logistic_tipo"] == filtro_modo_envio]
+    if filtro_sku:
+        df = df[df["seller_sku"].isin(filtro_sku)]
 
-    # === GRÁFICO DE BARRAS ===
+    # === GRÁFICO ===
     st.markdown("### 📊 Total por Hierarquia")
-    contagem = df.groupby("level1")["quantidade"].sum().sort_values(ascending=False)
-    resumo = contagem.reset_index().rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
-
-    fig_bar, ax = plt.subplots(figsize=(10, 4))
-    sns.barplot(x="Hierarquia 1", y="Quantidade", data=resumo, ax=ax)
-    ax.set_ylabel("Quantidade")
-    ax.set_xlabel("Hierarquia 1")
-    plt.xticks(rotation=45)
-    st.pyplot(fig_bar)
+    resumo = df.groupby("level1")["quantidade"].sum().reset_index().rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
+    fig_bar = px.bar(resumo, x="Hierarquia 1", y="Quantidade", text="Quantidade", color_discrete_sequence=["green"])
+    fig_bar.update_traces(textposition="outside")
+    fig_bar.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, margin=dict(t=20, b=20))
+    st.plotly_chart(fig_bar, use_container_width=True)
 
     # === TABELA FINAL ===
     tabela = df[[
@@ -1557,36 +1554,44 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         "seller_sku": "SKU"
     }).sort_values(by=["Dias Restantes", "Postagem Limite"])
 
+    tabela["Postagem Limite"] = tabela["Postagem Limite"].dt.date
+
     st.markdown("### 📋 Tabela de Expedição")
     st.dataframe(tabela, use_container_width=True, height=1000)
 
-    # === PDF COM LOGO E ESTILO ===
-    def gerar_relatorio_pdf(tabela_df, grafico):
+    # === PDF ===
+    def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
+        from reportlab.lib.utils import ImageReader
+
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
         elementos = []
 
-        elementos.append(Image("favicon.png", width=50, height=50))
+        # Logo e título lado a lado
+        logo = RLImage("favicon.png", width=30, height=30)
+        titulo = Paragraph("Relatório de Expedição - NEXUS", styles['Title'])
         elementos.append(Spacer(1, 12))
-        elementos.append(Paragraph("Relatório de Expedição - NEXUS", styles['Title']))
+        elementos.append(titulo)
+        elementos.append(logo)
         elementos.append(Spacer(1, 12))
 
-        # Gráfico salvo como imagem
+        # Exporta gráfico para imagem
         img_buf = BytesIO()
-        grafico.figure.savefig(img_buf, format="png", bbox_inches="tight")
+        fig_img = grafico_plotly.to_image(format="png")
+        img_buf.write(fig_img)
         img_buf.seek(0)
-        elementos.append(Image(img_buf, width=6*inch, height=3*inch))
+        elementos.append(RLImage(ImageReader(img_buf), width=400, height=200))
         elementos.append(Spacer(1, 12))
 
-        # Tabela no PDF
+        # Tabela
         dados = [tabela_df.columns.tolist()] + tabela_df.astype(str).values.tolist()
-        t = Table(dados)
+        t = Table(dados, repeatRows=1)
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#000000")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('GRID', (0, 0), (-1, -1), 0.25, colors.gray),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
             ('FONTSIZE', (0, 0), (-1, -1), 7),
         ]))
         elementos.append(t)
@@ -1596,9 +1601,9 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         b64 = b64encode(buffer.read()).decode()
         return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
 
-    # Botão de download
     href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
     st.markdown(href_pdf, unsafe_allow_html=True)
+
 
 
 def mostrar_gestao_despesas():
