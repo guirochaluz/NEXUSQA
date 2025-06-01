@@ -1441,18 +1441,22 @@ def mostrar_gestao_sku():
 def mostrar_expedicao_logistica(df: pd.DataFrame):
     import streamlit as st
     import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from io import BytesIO
+    from base64 import b64encode
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
 
-    # Remove o espaçamento superior
-    st.markdown(
-        """
+    st.markdown("""
         <style>
-        .block-container {
-            padding-top: 0rem;
-        }
+        .block-container { padding-top: 0rem; }
+        .stDataFrame thead tr th { position: sticky; top: 0; background-color: #f0f2f6; z-index: 1; }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     st.markdown("<h3>📦 Expedição</h3>", unsafe_allow_html=True)
 
@@ -1460,82 +1464,66 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.warning("Nenhuma venda encontrada.")
         return
 
-    # Converte campos de data
-    df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"])
-    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None)
-    df["dias_restantes"] = (df["shipment_delivery_limit"].dt.normalize() - hoje).dt.days
-
-    # Cria a coluna de quantidade total
+    df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"], errors="coerce")
+    df = df[df["shipment_delivery_limit"].notna()]
+    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_convert("America/Sao_Paulo").dt.normalize()
+    hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
+    df["dias_restantes"] = (df["shipment_delivery_limit"] - hoje).dt.days
     df["quantidade"] = df["quantity"] * df["quantity_sku"].fillna(0)
 
-    # Aplica a transformação de logistic_type
     mapa_logistic = {
         "fulfillment": "FULL",
         "self_service": "FLEX",
-        "drop_off": "Agência/Correios",
-        "xd_drop_off": "Agência/Correios",
+        "drop_off": "Correios",
+        "xd_drop_off": "Agência",
         "cross_docking": "Coleta",
         "me2": "Envio Padrão"
     }
-    df["logistic_tipo"] = df["shipment_logistic_type"].map(mapa_logistic).fillna("outros")
+    df["logistic_tipo"] = df["shipment_logistic_type"].map(mapa_logistic).fillna("Outros")
 
-    # === FILTRO DE DATA COM OPÇÕES RÁPIDAS ===
-    st.markdown("### 📅 Filtro de Data")
+    # === FILTRO DE DATAS ===
     col1, col2, col3 = st.columns([1.5, 1.2, 1.2])
-
     with col1:
-        filtro_rapido = st.selectbox(
-            "Filtrar Período",
-            [
-                "Período Personalizado",
-                "Hoje",
-                "Ontem",
-                "Últimos 7 Dias",
-                "Este Mês",
-                "Últimos 30 Dias",
-                "Este Ano"
-            ],
-            index=1,
-            key="filtro_quick_exp"
-        )
+        filtro_rapido = st.selectbox("Filtrar Período", [
+            "Período Personalizado", "Hoje", "Ontem", "Últimos 7 Dias",
+            "Este Mês", "Últimos 30 Dias", "Este Ano"
+        ], index=1)
 
-    hoje_data = pd.Timestamp.now(tz="America/Sao_Paulo").date()
-    valid_dates = df["shipment_delivery_limit"].dropna()
-    data_min = valid_dates.min().date()
-    data_max = valid_dates.max().date()
-
+    data_min = df["shipment_delivery_limit"].dt.date.min()
+    data_max = df["shipment_delivery_limit"].dt.date.max()
+    hoje_date = hoje.date()
 
     if filtro_rapido == "Hoje":
-        de = ate = min(hoje_data, data_max)
+        de, ate = hoje_date, hoje_date
     elif filtro_rapido == "Ontem":
-        de = ate = hoje_data - pd.Timedelta(days=1)
+        de = ate = hoje_date - pd.Timedelta(days=1)
     elif filtro_rapido == "Últimos 7 Dias":
-        de, ate = hoje_data - pd.Timedelta(days=7), hoje_data
+        de, ate = hoje_date - pd.Timedelta(days=7), hoje_date
     elif filtro_rapido == "Últimos 30 Dias":
-        de, ate = hoje_data - pd.Timedelta(days=30), hoje_data
+        de, ate = hoje_date - pd.Timedelta(days=30), hoje_date
     elif filtro_rapido == "Este Mês":
-        de, ate = hoje_data.replace(day=1), hoje_data
+        de, ate = hoje_date.replace(day=1), hoje_date
     elif filtro_rapido == "Este Ano":
-        de, ate = hoje_data.replace(month=1, day=1), hoje_data
+        de, ate = hoje_date.replace(month=1, day=1), hoje_date
     else:
         de, ate = data_min, data_max
 
-    custom = (filtro_rapido == "Período Personalizado")
-
     with col2:
-        de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=not custom, key="de_exp")
+        de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=filtro_rapido != "Período Personalizado")
     with col3:
-        ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=not custom, key="ate_exp")
+        ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=filtro_rapido != "Período Personalizado")
 
-    # Aplica filtro de data antes dos filtros visuais
     df = df[(df["shipment_delivery_limit"].dt.date >= de) & (df["shipment_delivery_limit"].dt.date <= ate)]
 
-    # === FILTROS BASEADOS NA DATA ===
-    filtro_nickname = st.multiselect("👤 Nickname", sorted(df["nickname"].dropna().unique().tolist()))
-    filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
-    filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
+    # === FILTROS DINÂMICOS ===
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        filtro_nickname = st.multiselect("👤 Conta", sorted(df["nickname"].dropna().unique().tolist()))
+    with col2:
+        filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
+    with col3:
+        filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
 
-    # === APLICAÇÃO DOS FILTROS RESTANTES ===
     if filtro_nickname:
         df = df[df["nickname"].isin(filtro_nickname)]
     if filtro_hierarquia:
@@ -1543,33 +1531,74 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     if filtro_modo_envio != "Todos":
         df = df[df["logistic_tipo"] == filtro_modo_envio]
 
+    # === GRÁFICO DE BARRAS ===
+    st.markdown("### 📊 Total por Hierarquia")
+    contagem = df.groupby("level1")["quantidade"].sum().sort_values(ascending=False)
+    resumo = contagem.reset_index().rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
+
+    fig_bar, ax = plt.subplots(figsize=(10, 4))
+    sns.barplot(x="Hierarquia 1", y="Quantidade", data=resumo, ax=ax)
+    ax.set_ylabel("Quantidade")
+    ax.set_xlabel("Hierarquia 1")
+    plt.xticks(rotation=45)
+    st.pyplot(fig_bar)
+
     # === TABELA FINAL ===
     tabela = df[[
-        "nickname",
-        "level1",
-        "logistic_tipo",
-        "shipment_receiver_name",
-        "quantidade",
-        "seller_sku",
-        "shipment_delivery_limit",
-        "dias_restantes",
-        "order_id"
+        "nickname", "logistic_tipo", "quantidade", "level1",
+        "shipment_delivery_limit", "dias_restantes", "seller_sku"
     ]].rename(columns={
-        "nickname": "Nickname",
-        "level1": "Hierarquia 1",
+        "nickname": "Conta",
         "logistic_tipo": "Modo de Envio",
-        "shipment_receiver_name": "Nome",
         "quantidade": "Quantidade",
-        "seller_sku": "SKU",
+        "level1": "Hierarquia 1",
         "shipment_delivery_limit": "Postagem Limite",
         "dias_restantes": "Dias Restantes",
-        "order_id": "Order ID"
-    })
+        "seller_sku": "SKU"
+    }).sort_values(by=["Dias Restantes", "Postagem Limite"])
 
-    # Ordena por postagem mais próxima
-    tabela = tabela.sort_values(by=["Dias Restantes", "Postagem Limite"])
+    st.markdown("### 📋 Tabela de Expedição")
+    st.dataframe(tabela, use_container_width=True, height=1000)
 
-    st.dataframe(tabela, use_container_width=True)
+    # === PDF COM LOGO E ESTILO ===
+    def gerar_relatorio_pdf(tabela_df, grafico):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        elementos = []
+
+        elementos.append(Image("favicon.png", width=50, height=50))
+        elementos.append(Spacer(1, 12))
+        elementos.append(Paragraph("Relatório de Expedição - NEXUS", styles['Title']))
+        elementos.append(Spacer(1, 12))
+
+        # Gráfico salvo como imagem
+        img_buf = BytesIO()
+        grafico.figure.savefig(img_buf, format="png", bbox_inches="tight")
+        img_buf.seek(0)
+        elementos.append(Image(img_buf, width=6*inch, height=3*inch))
+        elementos.append(Spacer(1, 12))
+
+        # Tabela no PDF
+        dados = [tabela_df.columns.tolist()] + tabela_df.astype(str).values.tolist()
+        t = Table(dados)
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#000000")),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.gray),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ]))
+        elementos.append(t)
+
+        doc.build(elementos)
+        buffer.seek(0)
+        b64 = b64encode(buffer.read()).decode()
+        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
+
+    # Botão de download
+    href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
+    st.markdown(href_pdf, unsafe_allow_html=True)
 
 
 def mostrar_gestao_despesas():
