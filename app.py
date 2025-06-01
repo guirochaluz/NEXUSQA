@@ -515,8 +515,6 @@ def mostrar_dashboard():
         st.warning("Nenhuma venda encontrada para os filtros selecionados.")
         st.stop()
 
-
-
     
     # Estilo customizado (CSS)
     st.markdown("""
@@ -1458,7 +1456,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     st.markdown("<h3>📦 Expedição</h3>", unsafe_allow_html=True)
 
-        if df.empty:
+    if df.empty:
         st.warning("Nenhuma venda encontrada.")
         return
 
@@ -1481,22 +1479,67 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     }
     df["logistic_tipo"] = df["shipment_logistic_type"].map(mapa_logistic).fillna("outros")
 
-    # === FILTROS ===
+    # === FILTRO DE DATA COM OPÇÕES RÁPIDAS ===
+    st.markdown("### 📅 Filtro de Data")
+    col1, col2, col3 = st.columns([1.5, 1.2, 1.2])
+
+    with col1:
+        filtro_rapido = st.selectbox(
+            "Filtrar Período",
+            [
+                "Período Personalizado",
+                "Hoje",
+                "Ontem",
+                "Últimos 7 Dias",
+                "Este Mês",
+                "Últimos 30 Dias",
+                "Este Ano"
+            ],
+            index=1,
+            key="filtro_quick_exp"
+        )
+
+    hoje_data = pd.Timestamp.now(tz="America/Sao_Paulo").date()
+    data_min = df["shipment_delivery_limit"].dt.date.min()
+    data_max = df["shipment_delivery_limit"].dt.date.max()
+
+    if filtro_rapido == "Hoje":
+        de = ate = min(hoje_data, data_max)
+    elif filtro_rapido == "Ontem":
+        de = ate = hoje_data - pd.Timedelta(days=1)
+    elif filtro_rapido == "Últimos 7 Dias":
+        de, ate = hoje_data - pd.Timedelta(days=7), hoje_data
+    elif filtro_rapido == "Últimos 30 Dias":
+        de, ate = hoje_data - pd.Timedelta(days=30), hoje_data
+    elif filtro_rapido == "Este Mês":
+        de, ate = hoje_data.replace(day=1), hoje_data
+    elif filtro_rapido == "Este Ano":
+        de, ate = hoje_data.replace(month=1, day=1), hoje_data
+    else:
+        de, ate = data_min, data_max
+
+    custom = (filtro_rapido == "Período Personalizado")
+
+    with col2:
+        de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=not custom, key="de_exp")
+    with col3:
+        ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=not custom, key="ate_exp")
+
+    # Aplica filtro de data antes dos filtros visuais
+    df = df[(df["shipment_delivery_limit"].dt.date >= de) & (df["shipment_delivery_limit"].dt.date <= ate)]
+
+    # === FILTROS BASEADOS NA DATA ===
     filtro_nickname = st.multiselect("👤 Nickname", sorted(df["nickname"].dropna().unique().tolist()))
     filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
     filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
-    filtro_data = st.date_input("📆 Postagem Limite", [])
 
-    # === APLICAÇÃO DOS FILTROS ===
+    # === APLICAÇÃO DOS FILTROS RESTANTES ===
     if filtro_nickname:
         df = df[df["nickname"].isin(filtro_nickname)]
     if filtro_hierarquia:
         df = df[df["level1"].isin(filtro_hierarquia)]
     if filtro_modo_envio != "Todos":
         df = df[df["logistic_tipo"] == filtro_modo_envio]
-    if filtro_data and len(filtro_data) == 2:
-        de, ate = filtro_data
-        df = df[(df["shipment_delivery_limit"] >= pd.to_datetime(de)) & (df["shipment_delivery_limit"] <= pd.to_datetime(ate))]
 
     # === TABELA FINAL ===
     tabela = df[[
