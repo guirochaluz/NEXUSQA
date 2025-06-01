@@ -1535,16 +1535,29 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     # === GRÁFICO ===
     st.markdown("### 📊 Total por Hierarquia")
     resumo = (
-    df.groupby("level1")["quantidade"]
-    .sum()
-    .reset_index()
-    .rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
-    .sort_values(by="Quantidade", ascending=False)
+        df.groupby("level1")["quantidade"]
+        .sum()
+        .reset_index()
+        .rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
+        .sort_values(by="Quantidade", ascending=False)
     )
-    fig_bar = px.bar(resumo, x="Hierarquia 1", y="Quantidade", text="Quantidade", color_discrete_sequence=["green"])
+    fig_bar = px.bar(
+        resumo,
+        x="Hierarquia 1",
+        y="Quantidade",
+        text="Quantidade",
+        color_discrete_sequence=["green"]
+    )
     fig_bar.update_traces(textposition="outside")
-    fig_bar.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, margin=dict(t=20, b=20))
+    fig_bar.update_layout(
+        showlegend=False,
+        xaxis_title=None,
+        yaxis_title=None,
+        margin=dict(t=20, b=20),
+        height=320  # ⬅️ Ajuste a altura aqui conforme necessário
+    )
     st.plotly_chart(fig_bar, use_container_width=True)
+
 
     # === TABELA FINAL ===
     tabela = df[[
@@ -1587,7 +1600,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         fig_img = grafico_plotly.to_image(format="png")
         img_buf.write(fig_img)
         img_buf.seek(0)
-        elementos.append(RLImage(ImageReader(img_buf), width=400, height=200))
+        elementos.append(RLImage(img_buf, width=400, height=200))
         elementos.append(Spacer(1, 12))
 
         # Tabela
@@ -1608,8 +1621,9 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
 
     href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
+    col_download, col_vazio = st.columns([0.85, 0.15])
+    with col_vazio:
     st.markdown(href_pdf, unsafe_allow_html=True)
-
 
 
 def mostrar_gestao_despesas():
