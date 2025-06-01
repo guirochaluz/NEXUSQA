@@ -1517,7 +1517,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     df = df[(df["shipment_delivery_limit"].dt.date >= de) & (df["shipment_delivery_limit"].dt.date <= ate)]
 
     # === FILTROS DINÂMICOS ===
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns([1.5, 1.2, 1.2])
     with col1:
         filtro_nickname = st.multiselect("👤 Conta", sorted(df["nickname"].dropna().unique().tolist()))
     with col2:
@@ -1534,7 +1534,13 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     # === GRÁFICO ===
     st.markdown("### 📊 Total por Hierarquia")
-    resumo = df.groupby("level1")["quantidade"].sum().reset_index().rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
+    resumo = (
+    df.groupby("level1")["quantidade"]
+    .sum()
+    .reset_index()
+    .rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
+    .sort_values(by="Quantidade", ascending=False)
+    )
     fig_bar = px.bar(resumo, x="Hierarquia 1", y="Quantidade", text="Quantidade", color_discrete_sequence=["green"])
     fig_bar.update_traces(textposition="outside")
     fig_bar.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, margin=dict(t=20, b=20))
