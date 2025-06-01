@@ -1500,8 +1500,10 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         )
 
     hoje_data = pd.Timestamp.now(tz="America/Sao_Paulo").date()
-    data_min = df["shipment_delivery_limit"].dt.date.min()
-    data_max = df["shipment_delivery_limit"].dt.date.max()
+    valid_dates = df["shipment_delivery_limit"].dropna()
+    data_min = valid_dates.min().date()
+    data_max = valid_dates.max().date()
+
 
     if filtro_rapido == "Hoje":
         de = ate = min(hoje_data, data_max)
