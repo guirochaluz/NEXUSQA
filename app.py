@@ -1620,10 +1620,10 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         b64 = b64encode(buffer.read()).decode()
         return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
 
-    href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
-    col_download, col_vazio = st.columns([0.85, 0.15])
-    with col_vazio:
-    st.markdown(href_pdf, unsafe_allow_html=True)
+        href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
+        col_download, col_vazio = st.columns([0.85, 0.15])
+        with col_vazio:
+        st.markdown(href_pdf, unsafe_allow_html=True)
 
 
 def mostrar_gestao_despesas():
