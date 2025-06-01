@@ -1441,25 +1441,23 @@ def mostrar_gestao_sku():
 def mostrar_expedicao_logistica(df: pd.DataFrame):
     import streamlit as st
     import pandas as pd
-    import matplotlib.pyplot as plt
+    import plotly.express as px
     from io import BytesIO
     from base64 import b64encode
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from datetime import datetime
-    import plotly.express as px
+    from reportlab.lib.utils import ImageReader
 
     st.markdown("""
         <style>
         .block-container { padding-top: 0rem; }
         .stDataFrame thead tr th { position: sticky; top: 0; background-color: #f0f2f6; z-index: 1; }
-        .css-1kyxreq, .css-1v0mbdj { width: 100% !important; }
         </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("<h3>📦 Expedição</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>\U0001F4E6 Expedição</h3>", unsafe_allow_html=True)
 
     if df.empty:
         st.warning("Nenhuma venda encontrada.")
@@ -1467,7 +1465,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"], errors="coerce")
     df = df[df["shipment_delivery_limit"].notna()]
-    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.normalize()
+    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_localize("UTC", ambiguous='NaT').dt.tz_convert("America/Sao_Paulo").dt.normalize()
     hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
     df["dias_restantes"] = (df["shipment_delivery_limit"] - hoje).dt.days
     df["quantidade"] = df["quantity"] * df["quantity_sku"].fillna(0)
@@ -1517,23 +1515,23 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     df = df[(df["shipment_delivery_limit"].dt.date >= de) & (df["shipment_delivery_limit"].dt.date <= ate)]
 
     # === FILTROS DINÂMICOS ===
-    col1, col2, col3 = st.columns([1.5, 1.2, 1.2])
+    col1, col2, col3 = st.columns(3)
     with col1:
-        filtro_nickname = st.multiselect("👤 Conta", sorted(df["nickname"].dropna().unique().tolist()))
+        filtro_nickname = st.multiselect("\U0001F464 Conta", sorted(df["nickname"].dropna().unique().tolist()))
     with col2:
-        filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
+        filtro_hierarquia = st.multiselect("\U0001F9ED Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
     with col3:
-        filtro_sku = st.multiselect("🧾 SKU", sorted(df["seller_sku"].dropna().unique().tolist()))
+        filtro_modo_envio = st.selectbox("\U0001F69B Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
 
     if filtro_nickname:
         df = df[df["nickname"].isin(filtro_nickname)]
     if filtro_hierarquia:
         df = df[df["level1"].isin(filtro_hierarquia)]
-    if filtro_sku:
-        df = df[df["seller_sku"].isin(filtro_sku)]
+    if filtro_modo_envio != "Todos":
+        df = df[df["logistic_tipo"] == filtro_modo_envio]
 
     # === GRÁFICO ===
-    st.markdown("### 📊 Total por Hierarquia")
+    st.markdown("### \U0001F4CA Total por Hierarquia")
     resumo = (
         df.groupby("level1")["quantidade"]
         .sum()
@@ -1541,33 +1539,37 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         .rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
         .sort_values(by="Quantidade", ascending=False)
     )
-    fig_bar = px.bar(
-        resumo,
-        x="Hierarquia 1",
-        y="Quantidade",
-        text="Quantidade",
-        color_discrete_sequence=["green"]
-    )
+    fig_bar = px.bar(resumo, x="Hierarquia 1", y="Quantidade", text="Quantidade", color_discrete_sequence=["green"])
     fig_bar.update_traces(textposition="outside")
-    fig_bar.update_layout(
-        showlegend=False,
-        xaxis_title=None,
-        yaxis_title=None,
-        margin=dict(t=20, b=20),
-        height=320  # ⬅️ Ajuste a altura aqui conforme necessário
-    )
+    fig_bar.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, margin=dict(t=20, b=20), height=350)
     st.plotly_chart(fig_bar, use_container_width=True)
 
+    # === TABELA FINAL ===
+    tabela = df[[
+        "nickname", "logistic_tipo", "quantidade", "level1",
+        "shipment_delivery_limit", "dias_restantes", "seller_sku"
+    ]].rename(columns={
+        "nickname": "Conta",
+        "logistic_tipo": "Modo de Envio",
+        "quantidade": "Quantidade",
+        "level1": "Hierarquia 1",
+        "shipment_delivery_limit": "Postagem Limite",
+        "dias_restantes": "Dias Restantes",
+        "seller_sku": "SKU"
+    }).sort_values(by=["Dias Restantes", "Postagem Limite"])
+
+    tabela["Postagem Limite"] = tabela["Postagem Limite"].dt.date
+
+    st.markdown("### \U0001F4CB Tabela de Expedição")
+    st.dataframe(tabela, use_container_width=True, height=1000)
 
     # === PDF ===
     def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
-        from reportlab.lib.utils import ImageReader
-    
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
         elementos = []
-    
+
         # Logo + título lado a lado
         logo = RLImage("favicon.png", width=30, height=30)
         titulo = Paragraph("<b>Relatório de Expedição - NEXUS</b>", styles["Title"])
@@ -1577,15 +1579,15 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
         ]))
         elementos.append(Spacer(1, 12))
-    
-        # Exporta gráfico plotly como imagem
+
+        # Exporta gráfico como imagem
         img_buf = BytesIO()
         fig_img = grafico_plotly.to_image(format="png")
         img_buf.write(fig_img)
         img_buf.seek(0)
         elementos.append(RLImage(img_buf, width=450, height=250))
         elementos.append(Spacer(1, 12))
-    
+
         # Tabela
         dados = [tabela_df.columns.tolist()] + tabela_df.astype(str).values.tolist()
         t = Table(dados, repeatRows=1)
@@ -1597,18 +1599,17 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             ('FONTSIZE', (0, 0), (-1, -1), 7),
         ]))
         elementos.append(t)
-    
+
         doc.build(elementos)
         buffer.seek(0)
         b64 = b64encode(buffer.read()).decode()
-        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
-    
-    
-    # === BOTÃO PDF FORA DA FUNÇÃO
+        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">\U0001F4C4 Baixar Relatório PDF</a>'
+
     href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
     col_download, col_vazio = st.columns([0.85, 0.15])
     with col_vazio:
         st.markdown(href_pdf, unsafe_allow_html=True)
+
 
 
 
