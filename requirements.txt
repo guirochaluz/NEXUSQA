@@ -21,3 +21,4 @@ textblob
 reportlab==4.0.9
 matplotlib==3.8.4
 seaborn==0.13.2
+kaleido>=0.2.1
