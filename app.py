@@ -1466,7 +1466,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     df["shipment_delivery_limit"] = pd.to_datetime(df["shipment_delivery_limit"], errors="coerce")
     df = df[df["shipment_delivery_limit"].notna()]
-    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_convert("America/Sao_Paulo").dt.normalize()
+    df["shipment_delivery_limit"] = df["shipment_delivery_limit"].dt.tz_localize("UTC", ambiguous='NaT').dt.tz_convert("America/Sao_Paulo").dt.normalize()
     hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
     df["dias_restantes"] = (df["shipment_delivery_limit"] - hoje).dt.days
     df["quantidade"] = df["quantity"] * df["quantity_sku"].fillna(0)
