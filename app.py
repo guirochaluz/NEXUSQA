@@ -1564,52 +1564,102 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     st.markdown("### \U0001F4CB Tabela de Expedição")
     st.dataframe(tabela, use_container_width=True, height=1000)
 
-    # === PDF ===
+    from io import BytesIO
+    from base64 import b64encode
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image as RLImage
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from datetime import datetime
+    
     def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
         elementos = []
-
-        # Logo + título lado a lado
-        logo = RLImage("favicon.png", width=30, height=30)
-        titulo = Paragraph("<b>Relatório de Expedição - NEXUS</b>", styles["Title"])
-        elementos.append(Table([[logo, titulo]], colWidths=[35, 450], style=[
+    
+        # === Cabeçalho com logo e título ===
+        logo = RLImage("favicon.png", width=60, height=60)
+        titulo = Paragraph("<b><font size=16>Relatório de Expedição - NEXUS</font></b>", styles["Title"])
+        data_emissao = Paragraph(f"<font size=10>Emitido em: {datetime.now().strftime('%d/%m/%Y')}</font>", styles["Normal"])
+    
+        cabecalho = Table([[logo, titulo, data_emissao]], colWidths=[70, 380, 100], style=[
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ]))
+        ])
+        elementos.append(cabecalho)
         elementos.append(Spacer(1, 12))
-
-        # Exporta gráfico como imagem
+    
+        # === Gráfico convertido em imagem ===
         img_buf = BytesIO()
         fig_img = grafico_plotly.to_image(format="png")
         img_buf.write(fig_img)
         img_buf.seek(0)
         elementos.append(RLImage(img_buf, width=450, height=250))
         elementos.append(Spacer(1, 12))
-
-        # Tabela
+    
+        # === Ajustes visuais no DataFrame ===
+        tabela_df = tabela_df.copy()
+        tabela_df["Modo de Envio"] = tabela_df["Modo de Envio"].replace({
+            "Coleta": "🏢 Coleta", 
+            "FLEX": "🚚 FLEX", 
+            "Correios": "📦 Correios", 
+            "Agência": "🏬 Agência",
+            "FULL": "⚙️ FULL"
+        })
+    
+        # Ordenação
+        tabela_df.sort_values(by=["Conta", "Hierarquia 1"], inplace=True)
+    
+        # Totalizadores por Conta
+        totalizadores = tabela_df.groupby("Conta")["Quantidade"].sum().reset_index()
+        totalizadores["Modo de Envio"] = ""
+        totalizadores["Hierarquia 1"] = ""
+        totalizadores["Postagem Limite"] = ""
+        totalizadores["Dias Restantes"] = ""
+        totalizadores["SKU"] = "TOTAL"
+    
+        # Junta total com tabela
+        tabela_df = pd.concat([tabela_df, totalizadores], ignore_index=True)
+    
+        # === Tabela PDF ===
         dados = [tabela_df.columns.tolist()] + tabela_df.astype(str).values.tolist()
-        t = Table(dados, repeatRows=1)
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),
+        tabela = Table(dados, repeatRows=1)
+    
+        tabela.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),  # Cabeçalho
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
             ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ]))
-        elementos.append(t)
-
+    
+        # Zebra striping
+        for i in range(1, len(dados)):
+            if i % 2 == 0:
+                tabela.setStyle(TableStyle([
+                    ('BACKGROUND', (0, i), (-1, i), colors.whitesmoke)
+                ]))
+    
+        elementos.append(tabela)
+    
         doc.build(elementos)
         buffer.seek(0)
         b64 = b64encode(buffer.read()).decode()
-        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">\U0001F4C4 Baixar Relatório PDF</a>'
-
+        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
+    
+    # === Botão de download no canto direito ===
     href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
     col_download, col_vazio = st.columns([0.85, 0.15])
     with col_vazio:
         st.markdown(href_pdf, unsafe_allow_html=True)
+
 
 
 
