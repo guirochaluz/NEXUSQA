@@ -1481,17 +1481,17 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     df["logistic_tipo"] = df["shipment_logistic_type"].map(mapa_logistic).fillna("Outros")
 
     # === FILTRO DE DATAS ===
-    col1, col2, col3 = st.columns([1.5, 1.2, 1.2])
+    col1, col2, col3 = st.columns(3)
     with col1:
         filtro_rapido = st.selectbox("Filtrar Período", [
             "Período Personalizado", "Hoje", "Ontem", "Últimos 7 Dias",
             "Este Mês", "Últimos 30 Dias", "Este Ano"
         ], index=1)
-
+    
     data_min = df["shipment_delivery_limit"].dt.date.min()
     data_max = df["shipment_delivery_limit"].dt.date.max()
     hoje_date = hoje.date()
-
+    
     if filtro_rapido == "Hoje":
         de, ate = hoje_date, hoje_date
     elif filtro_rapido == "Ontem":
@@ -1506,29 +1506,30 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         de, ate = hoje_date.replace(month=1, day=1), hoje_date
     else:
         de, ate = data_min, data_max
-
+    
     with col2:
         de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=filtro_rapido != "Período Personalizado")
     with col3:
         ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=filtro_rapido != "Período Personalizado")
-
+    
     df = df[(df["shipment_delivery_limit"].dt.date >= de) & (df["shipment_delivery_limit"].dt.date <= ate)]
-
+    
     # === FILTROS DINÂMICOS ===
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        filtro_nickname = st.multiselect("\U0001F464 Conta", sorted(df["nickname"].dropna().unique().tolist()))
-    with col2:
-        filtro_hierarquia = st.multiselect("\U0001F9ED Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
-    with col3:
-        filtro_modo_envio = st.selectbox("\U0001F69B Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
-
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        filtro_nickname = st.multiselect("👤 Conta", sorted(df["nickname"].dropna().unique().tolist()))
+    with col5:
+        filtro_hierarquia = st.multiselect("🧭 Hierarquia 1", sorted(df["level1"].dropna().unique().tolist()))
+    with col6:
+        filtro_modo_envio = st.selectbox("🚛 Modo de Envio", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
+    
     if filtro_nickname:
         df = df[df["nickname"].isin(filtro_nickname)]
     if filtro_hierarquia:
         df = df[df["level1"].isin(filtro_hierarquia)]
     if filtro_modo_envio != "Todos":
         df = df[df["logistic_tipo"] == filtro_modo_envio]
+
 
     # === GRÁFICO ===
     st.markdown("### \U0001F4CA Total por Hierarquia")
