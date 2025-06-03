@@ -1561,8 +1561,31 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     tabela["Postagem Limite"] = tabela["Postagem Limite"].dt.date
 
-    st.markdown("### \U0001F4CB Tabela de Expedição")
+    # Cabeçalho com botão de download na direita
+    col1, col2 = st.columns([0.75, 0.25])
+    with col1:
+        st.markdown("### 📋 Tabela de Expedição")
+    with col2:
+        href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
+        st.markdown(f"""
+            <div style="text-align: right; margin-top: 12px;">
+                <a href="{href_pdf.split('"')[1]}" download="relatorio_expedicao.pdf" style="
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 6px 16px;
+                    text-decoration: none;
+                    font-size: 13px;
+                    border-radius: 6px;
+                    font-weight: bold;
+                ">
+                    ⬇️ Baixar PDF
+                </a>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Agora exibe a tabela normalmente
     st.dataframe(tabela, use_container_width=True, height=1000)
+
 
     from io import BytesIO
     from base64 import b64encode
