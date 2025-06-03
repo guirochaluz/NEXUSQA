@@ -1531,15 +1531,11 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         doc.build(elementos, onFirstPage=rodape, onLaterPages=rodape)
         buffer.seek(0)
         b64 = b64encode(buffer.read()).decode()
-        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">\ud83d\udcc4 Baixar Relatório PDF</a>'
-
-    # ===== PROCESSAMENTO INICIAL =====
-    # (demais códigos de filtro e visualização continuam aqui...)
-    # ao final da função:
+        return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
 
     col1, col2 = st.columns([0.75, 0.25])
     with col1:
-        st.markdown("### \ud83d\udccb Tabela de Expedição")
+        st.markdown("### 📋 Tabela de Expedição")
     with col2:
         href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
         st.markdown(f"""
@@ -1553,15 +1549,12 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
                     border-radius: 6px;
                     font-weight: bold;
                 ">
-                    \u2b07\ufe0f Baixar PDF
+                    ⬇️ Baixar PDF
                 </a>
             </div>
         """, unsafe_allow_html=True)
 
     st.dataframe(tabela, use_container_width=True, height=1000)
-
-    
-
 
 
 def mostrar_gestao_despesas():
