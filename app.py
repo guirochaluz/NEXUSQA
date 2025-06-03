@@ -1537,7 +1537,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     with col1:
         st.markdown("### 📋 Tabela de Expedição")
     with col2:
-        href_pdf = gerar_relatorio_pdf(tabela, fig_bar)
+        fig_bar = px.bar(df, x="Hierarquia 1", y="Quantidade", color="Modo de Envio", barmode="group") href_pdf = gerar_relatorio_pdf(df, fig_bar)
         st.markdown(f"""
             <div style="text-align: right; margin-top: 12px;">
                 <a href="{href_pdf.split('"')[1]}" download="relatorio_expedicao.pdf" style="
