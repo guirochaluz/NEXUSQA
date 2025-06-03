@@ -1533,11 +1533,13 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         b64 = b64encode(buffer.read()).decode()
         return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
 
+    fig_bar = px.bar(df, x="Hierarquia 1", y="Quantidade", color="Modo de Envio", barmode="group")
+
     col1, col2 = st.columns([0.75, 0.25])
     with col1:
         st.markdown("### 📋 Tabela de Expedição")
     with col2:
-        fig_bar = px.bar(df, x="Hierarquia 1", y="Quantidade", color="Modo de Envio", barmode="group") href_pdf = gerar_relatorio_pdf(df, fig_bar)
+        href_pdf = gerar_relatorio_pdf(df, fig_bar)
         st.markdown(f"""
             <div style="text-align: right; margin-top: 12px;">
                 <a href="{href_pdf.split('"')[1]}" download="relatorio_expedicao.pdf" style="
@@ -1554,7 +1556,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             </div>
         """, unsafe_allow_html=True)
 
-    st.dataframe(tabela, use_container_width=True, height=1000)
+    st.dataframe(df, use_container_width=True, height=1000)
 
 
 def mostrar_gestao_despesas():
