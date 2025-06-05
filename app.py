@@ -1441,6 +1441,14 @@ def mostrar_gestao_sku():
 def mostrar_expedicao_logistica(df: pd.DataFrame):
     import streamlit as st
     import plotly.express as px
+    import pandas as pd
+    from io import BytesIO
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    from plotly.io import to_image
+    import base64
 
     st.markdown(
         """
@@ -1488,13 +1496,76 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.error("Colunas 'quantity' e/ou 'quantity_sku' não encontradas.")
         st.stop()
 
-    # === Filtros ===
+    # === Filtro de data e status ===
+    if "date_adjusted" not in df.columns:
+        st.error("Coluna 'date_adjusted' não encontrada.")
+        st.stop()
+
+    col1, col2, col3, col4 = st.columns([1.5, 1.2, 1.2, 1.5])
+
+    with col1:
+        filtro_rapido = st.selectbox(
+            "Filtrar Período",
+            [
+                "Período Personalizado",
+                "Hoje",
+                "Ontem",
+                "Últimos 7 Dias",
+                "Este Mês",
+                "Últimos 30 Dias",
+                "Este Ano"
+            ],
+            index=1,
+            key="filtro_quick"
+        )
+
+    hoje = pd.Timestamp.now().date()
+    data_min = df["date_adjusted"].dt.date.min()
+    data_max = df["date_adjusted"].dt.date.max()
+
+    if filtro_rapido == "Hoje":
+        de = ate = min(hoje, data_max)
+    elif filtro_rapido == "Ontem":
+        de = ate = hoje - pd.Timedelta(days=1)
+    elif filtro_rapido == "Últimos 7 Dias":
+        de, ate = hoje - pd.Timedelta(days=7), hoje
+    elif filtro_rapido == "Últimos 30 Dias":
+        de, ate = hoje - pd.Timedelta(days=30), hoje
+    elif filtro_rapido == "Este Mês":
+        de, ate = hoje.replace(day=1), hoje
+    elif filtro_rapido == "Este Ano":
+        de, ate = hoje.replace(month=1, day=1), hoje
+    else:
+        de, ate = data_min, data_max
+
+    custom = (filtro_rapido == "Período Personalizado")
+
+    with col2:
+        de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=not custom, key="de_q")
+
+    with col3:
+        ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=not custom, key="ate_q")
+
+    with col4:
+        status_options = df["status"].dropna().unique().tolist()
+        status_opcoes = ["Todos"] + status_options
+        index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
+        status_selecionado = st.selectbox("Status", status_opcoes, index=index_padrao)
+
+    df = df[(df["date_adjusted"].dt.date >= de) & (df["date_adjusted"].dt.date <= ate)]
+    if status_selecionado != "Todos":
+        df = df[df["status"] == status_selecionado]
+
+    if df.empty:
+        st.warning("Nenhum dado encontrado com os filtros aplicados.")
+        return
+
+    # === Filtros adicionais ===
     col1, col2, col3 = st.columns(3)
     filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
     filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
     filtro_modo_envio = col3.selectbox("🚛 Modo de Envio:", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
 
-    # === Aplicar Filtros ===
     if filtro_nickname != "Todos":
         df = df[df["nickname"] == filtro_nickname]
     if filtro_hierarquia != "Todos":
@@ -1503,10 +1574,10 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         df = df[df["logistic_tipo"] == filtro_modo_envio]
 
     if df.empty:
-        st.warning("Nenhum dado encontrado com os filtros aplicados.")
+        st.warning("Nenhum dado encontrado após todos os filtros.")
         return
 
-    # === Agrupamento para gráfico e tabela ===
+    # === Agrupamento final ===
     df_grouped = df.groupby(["nickname", "level1", "logistic_tipo"], as_index=False)["quantidade"].sum()
     df_grouped = df_grouped.rename(columns={
         "nickname": "Conta",
@@ -1515,16 +1586,6 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         "quantidade": "Quantidade"
     })
     df_grouped["Quantidade"] = df_grouped["Quantidade"].astype(int)
-
-    # === KPIs ===
-    total_pedidos = int(df_grouped["Quantidade"].sum())
-    total_contas = df_grouped["Conta"].nunique()
-    total_por_modo = df_grouped.groupby("Modo de Envio")["Quantidade"].sum().to_dict()
-
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("📦 Total de Pedidos", f"{total_pedidos:,}".replace(",", "."))
-    col_b.metric("👤 Contas Ativas", total_contas)
-    col_c.metric("🚛 Modos de Envio", ", ".join([f"{k}: {v}" for k, v in total_por_modo.items()]))
 
     # === Gráfico ===
     fig_bar = px.bar(
@@ -1541,9 +1602,52 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     st.markdown("### 📋 Tabela de Expedição")
     st.dataframe(df_grouped, use_container_width=True, height=400)
 
-    # === Botão de PDF ===
+    # === PDF ===
+    def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+        styles = getSampleStyleSheet()
+        elementos = []
+
+        try:
+            logo = Image("favicon.png", width=60, height=60)
+            elementos.append(logo)
+        except:
+            elementos.append(Paragraph("[Logo não encontrada: favicon.png]", styles["Normal"]))
+
+        elementos.append(Spacer(1, 12))
+        elementos.append(Paragraph("📦 Relatório de Expedição e Logística", styles["Title"]))
+        elementos.append(Spacer(1, 12))
+
+        try:
+            img_bytes = to_image(grafico_plotly, format="png", width=700, height=400, scale=2)
+            img_buffer = BytesIO(img_bytes)
+            elementos.append(Image(img_buffer, width=480, height=270))
+            elementos.append(Spacer(1, 12))
+        except Exception as e:
+            elementos.append(Paragraph(f"[Erro ao gerar gráfico: {str(e)}]", styles["Normal"]))
+
+        dados = [tabela_df.columns.tolist()] + tabela_df.values.tolist()
+        tabela = Table(dados, repeatRows=1)
+        tabela.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
+        ]))
+        elementos.append(tabela)
+        doc.build(elementos)
+
+        pdf_base64 = base64.b64encode(buffer.getvalue()).decode()
+        href = f'<a href="data:application/pdf;base64,{pdf_base64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório em PDF</a>'
+        return href
+
     botao_pdf = gerar_relatorio_pdf(df_grouped, fig_bar)
     st.markdown(botao_pdf, unsafe_allow_html=True)
+
 
 
 def mostrar_gestao_despesas():
