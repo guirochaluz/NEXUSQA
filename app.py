@@ -1438,119 +1438,81 @@ def mostrar_gestao_sku():
                     st.error(f"❌ Erro ao processar: {e}")
 
 
-from io import BytesIO
-from base64 import b64encode
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image as RLImage, PageBreak
-)
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.pdfgen import canvas
-from datetime import datetime
+def mostrar_expedicao_logistica(df: pd.DataFrame):
+    import streamlit as st
+    import plotly.express as px
 
-def rodape(canvas_obj, doc):
-    canvas_obj.saveState()
-    pagina = f"Página {doc.page} | NEXUS Group"
-    canvas_obj.setFont("Helvetica", 7)
-    canvas_obj.drawRightString(A4[0] - 40, 15, pagina)
-    canvas_obj.restoreState()
-
-def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
-        topMargin=24, bottomMargin=36, leftMargin=36, rightMargin=36
+    st.markdown(
+        """
+        <style>
+        .block-container { padding-top: 0rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
-    styles = getSampleStyleSheet()
-    elementos = []
 
-    # === Cabeçalho com logo e título ===
-    logo = RLImage("favicon.png", width=60, height=60)
-    titulo = Paragraph("<b><font size=16>Relatório de Expedição - NEXUS</font></b>", styles["Title"])
-    data_emissao = Paragraph(f"<font size=10>Emitido em: {datetime.now().strftime('%d/%m/%Y')}</font>", styles["Normal"])
-    cabecalho = Table([[logo, titulo, data_emissao]], colWidths=[70, 380, 100], style=[
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-    ])
-    elementos.append(cabecalho)
-    elementos.append(Spacer(1, 12))
+    st.header("🚚 Expedição e Logística")
 
-    # === Gráfico como imagem ===
-    img_buf = BytesIO()
-    fig_img = grafico_plotly.to_image(format="png", scale=2)
-    img_buf.write(fig_img)
-    img_buf.seek(0)
-    elementos.append(RLImage(img_buf, width=450, height=250))
-    elementos.append(Spacer(1, 12))
+    if df.empty:
+        st.warning("Nenhum dado encontrado.")
+        return
 
-    # === Limpeza dos dados ===
-    tabela_df = tabela_df.copy()
-    tabela_df["Modo de Envio"] = tabela_df["Modo de Envio"].replace({
-        "Coleta": "Coleta", 
-        "FLEX": "FLEX", 
-        "Correios": "Correios", 
-        "Agência": "Agência",
-        "FULL": "FULL"
+    # === Filtros ===
+    col1, col2, col3 = st.columns(3)
+    filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
+    filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
+    filtro_modo_envio = col3.selectbox("🚛 Modo de Envio:", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
+
+    # === Aplicar Filtros ===
+    if filtro_nickname != "Todos":
+        df = df[df["nickname"] == filtro_nickname]
+    if filtro_hierarquia != "Todos":
+        df = df[df["level1"] == filtro_hierarquia]
+    if filtro_modo_envio != "Todos":
+        df = df[df["logistic_tipo"] == filtro_modo_envio]
+
+    if df.empty:
+        st.warning("Nenhum dado encontrado com os filtros aplicados.")
+        return
+
+    # === Agrupamento para gráfico e tabela ===
+    df_grouped = df.groupby(["nickname", "level1", "logistic_tipo"], as_index=False)["quantidade"].sum()
+    df_grouped = df_grouped.rename(columns={
+        "nickname": "Conta",
+        "level1": "Hierarquia 1",
+        "logistic_tipo": "Modo de Envio",
+        "quantidade": "Quantidade"
     })
-    tabela_df["Quantidade"] = tabela_df["Quantidade"].astype(int)
+    df_grouped["Quantidade"] = df_grouped["Quantidade"].astype(int)
 
-    # Ordenação
-    tabela_df.sort_values(by=["Conta", "Hierarquia 1"], inplace=True)
+    # === KPIs ===
+    total_pedidos = int(df_grouped["Quantidade"].sum())
+    total_contas = df_grouped["Conta"].nunique()
+    total_por_modo = df_grouped.groupby("Modo de Envio")["Quantidade"].sum().to_dict()
 
-    # === Tabela principal ===
-    dados = [tabela_df.columns.tolist()] + tabela_df.astype(str).values.tolist()
-    tabela = Table(dados, repeatRows=1, splitByRow=1)
-    estilo = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
-        ('ALIGN', (2, 1), (2, -1), 'CENTER'),  # Alinha coluna Quantidade
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-    ])
-    for i in range(1, len(dados)):
-        if i % 2 == 0:
-            estilo.add('BACKGROUND', (0, i), (-1, i), colors.whitesmoke)
-    tabela.setStyle(estilo)
-    elementos.append(tabela)
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("📦 Total de Pedidos", f"{total_pedidos:,}".replace(",", "."))
+    col_b.metric("👤 Contas Ativas", total_contas)
+    col_c.metric("🚛 Modos de Envio", ", ".join([f"{k}: {v}" for k, v in total_por_modo.items()]))
 
-    # === Quebra de página antes da tabela de totalizadores ===
-    elementos.append(PageBreak())
-
-    # === Totalizadores por Hierarquia 1 x Modo de Envio ===
-    resumo = (
-        tabela_df
-        .groupby(["Hierarquia 1", "Modo de Envio"])["Quantidade"]
-        .sum()
-        .unstack(fill_value=0)
-        .astype(int)
-        .reset_index()
+    # === Gráfico ===
+    fig_bar = px.bar(
+        df_grouped,
+        x="Hierarquia 1",
+        y="Quantidade",
+        color="Modo de Envio",
+        barmode="group",
+        height=400
     )
-    resumo.columns.name = None
-    dados_resumo = [resumo.columns.tolist()] + resumo.values.tolist()
-    tabela_resumo = Table(dados_resumo, repeatRows=1)
-    tabela_resumo.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#d9d9d9")),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
-        ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-    ]))
-    elementos.append(Paragraph("<b>Totalizadores por Hierarquia x Modo de Envio</b>", styles["Heading3"]))
-    elementos.append(Spacer(1, 6))
-    elementos.append(tabela_resumo)
+    st.plotly_chart(fig_bar, use_container_width=True)
 
-    doc.build(elementos, onFirstPage=rodape, onLaterPages=rodape)
-    buffer.seek(0)
-    b64 = b64encode(buffer.read()).decode()
-    return f'<a href="data:application/pdf;base64,{b64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório PDF</a>'
+    # === Tabela ===
+    st.markdown("### 📋 Tabela de Expedição")
+    st.dataframe(df_grouped, use_container_width=True, height=400)
+
+    # === Botão de PDF ===
+    botao_pdf = gerar_relatorio_pdf(df_grouped, fig_bar)
+    st.markdown(botao_pdf, unsafe_allow_html=True)
 
 def mostrar_gestao_despesas():
     st.markdown(
