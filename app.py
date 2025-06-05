@@ -1481,6 +1481,13 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.error("Coluna 'shipment_logistic_type' não encontrada.")
         st.stop()
 
+    # === Criar coluna 'quantidade' como quantity * quantity_sku ===
+    if "quantity" in df.columns and "quantity_sku" in df.columns:
+        df["quantidade"] = df["quantity"] * df["quantity_sku"]
+    else:
+        st.error("Colunas 'quantity' e/ou 'quantity_sku' não encontradas.")
+        st.stop()
+
     # === Filtros ===
     col1, col2, col3 = st.columns(3)
     filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
@@ -1537,6 +1544,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     # === Botão de PDF ===
     botao_pdf = gerar_relatorio_pdf(df_grouped, fig_bar)
     st.markdown(botao_pdf, unsafe_allow_html=True)
+
 
 def mostrar_gestao_despesas():
     st.markdown(
