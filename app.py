@@ -1457,6 +1457,30 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.warning("Nenhum dado encontrado.")
         return
 
+    # === Mapear shipment_logistic_type para logistic_tipo humanizado ===
+    def mapear_tipo(valor):
+        match valor:
+            case 'fulfillment':
+                return 'FULL'
+            case 'self_service':
+                return 'FLEX'
+            case 'drop_off':
+                return 'Correios'
+            case 'xd_drop_off':
+                return 'Agência'
+            case 'cross_docking':
+                return 'Coleta'
+            case 'me2':
+                return 'Envio Padrão'
+            case _:
+                return 'outros'
+
+    if "shipment_logistic_type" in df.columns:
+        df["logistic_tipo"] = df["shipment_logistic_type"].apply(mapear_tipo)
+    else:
+        st.error("Coluna 'shipment_logistic_type' não encontrada.")
+        st.stop()
+
     # === Filtros ===
     col1, col2, col3 = st.columns(3)
     filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
