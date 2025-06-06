@@ -1492,10 +1492,10 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     else:
         df["data_limite"] = pd.NaT
 
-    data_min_venda = df["data_venda"].min()
-    data_max_venda = df["data_venda"].max()
-    data_min_limite = df["data_limite"].min()
-    data_max_limite = df["data_limite"].max()
+    data_min_venda = df["data_venda"].dropna().min()
+    data_max_venda = df["data_venda"].dropna().max()
+    data_min_limite = df["data_limite"].dropna().min()
+    data_max_limite = df["data_limite"].dropna().max()
 
     # === LINHA 1: Venda ===
     st.markdown("#### 🎯 Filtros por Venda")
