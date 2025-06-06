@@ -1450,14 +1450,11 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     from plotly.io import to_image
     import base64
 
-    st.markdown(
-        """
+    st.markdown("""
         <style>
         .block-container { padding-top: 0rem; }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     st.header("🚚 Expedição e Logística")
 
@@ -1465,38 +1462,24 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.warning("Nenhum dado encontrado.")
         return
 
-    # === Mapear shipment_logistic_type para logistic_tipo humanizado ===
     def mapear_tipo(valor):
         match valor:
-            case 'fulfillment':
-                return 'FULL'
-            case 'self_service':
-                return 'FLEX'
-            case 'drop_off':
-                return 'Correios'
-            case 'xd_drop_off':
-                return 'Agência'
-            case 'cross_docking':
-                return 'Coleta'
-            case 'me2':
-                return 'Envio Padrão'
-            case _:
-                return 'outros'
+            case 'fulfillment': return 'FULL'
+            case 'self_service': return 'FLEX'
+            case 'drop_off': return 'Correios'
+            case 'xd_drop_off': return 'Agência'
+            case 'cross_docking': return 'Coleta'
+            case 'me2': return 'Envio Padrão'
+            case _: return 'outros'
 
-    if "shipment_logistic_type" in df.columns:
-        df["logistic_tipo"] = df["shipment_logistic_type"].apply(mapear_tipo)
-    else:
-        st.error("Coluna 'shipment_logistic_type' não encontrada.")
-        st.stop()
+    df["Tipo de Envio"] = df["shipment_logistic_type"].apply(mapear_tipo)
 
-    # === Criar coluna 'quantidade' como quantity * quantity_sku ===
     if "quantity" in df.columns and "quantity_sku" in df.columns:
         df["quantidade"] = df["quantity"] * df["quantity_sku"]
     else:
         st.error("Colunas 'quantity' e/ou 'quantity_sku' não encontradas.")
         st.stop()
 
-    # === Filtro de data e status ===
     if "date_adjusted" not in df.columns:
         st.error("Coluna 'date_adjusted' não encontrada.")
         st.stop()
@@ -1504,20 +1487,10 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     col1, col2, col3, col4 = st.columns([1.5, 1.2, 1.2, 1.5])
 
     with col1:
-        filtro_rapido = st.selectbox(
-            "Filtrar Período",
-            [
-                "Período Personalizado",
-                "Hoje",
-                "Ontem",
-                "Últimos 7 Dias",
-                "Este Mês",
-                "Últimos 30 Dias",
-                "Este Ano"
-            ],
-            index=1,
-            key="filtro_quick"
-        )
+        filtro_rapido = st.selectbox("Filtrar Período", [
+            "Período Personalizado", "Hoje", "Ontem", "Últimos 7 Dias",
+            "Este Mês", "Últimos 30 Dias", "Este Ano"
+        ], index=1, key="filtro_quick")
 
     hoje = pd.Timestamp.now().date()
     data_min = df["date_adjusted"].dt.date.min()
@@ -1542,10 +1515,8 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     with col2:
         de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=not custom, key="de_q")
-
     with col3:
         ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=not custom, key="ate_q")
-
     with col4:
         status_options = df["status"].dropna().unique().tolist()
         status_opcoes = ["Todos"] + status_options
@@ -1560,7 +1531,11 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.warning("Nenhum dado encontrado com os filtros aplicados.")
         return
 
-    # === Filtros adicionais ===
+    if "ml_user_id" in df.columns and "nickname" not in df.columns:
+        from backend.database import get_user_tokens
+        user_tokens = get_user_tokens()
+        df = df.merge(user_tokens[["ml_user_id", "nickname"]], on="ml_user_id", how="left")
+
     col1, col2, col3 = st.columns(3)
     filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
     filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
@@ -1577,29 +1552,35 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.warning("Nenhum dado encontrado após todos os filtros.")
         return
 
-    # === Agrupamento final ===
-    df_grouped = df.groupby("level1", as_index=False)["quantidade"].sum()
-    df_grouped = df_grouped.rename(columns={
-        "level1": "Hierarquia 1",
-        "quantidade": "Quantidade"
+    df["Canal de Venda"] = "MERCADO LIVRE"
+    df["Quantidade"] = df["quantity"] * df["quantity_sku"]
+
+    if "shipment_delivery_limit" in df.columns:
+        df["Data Limite do Envio"] = df["shipment_delivery_limit"].dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m/%Y")
+    else:
+        df["Data Limite do Envio"] = "—"
+
+    tabela = df[[
+        "order_id", "shipment_receiver_name", "nickname", "Tipo de Envio",
+        "Canal de Venda", "Data Limite do Envio", "Quantidade"
+    ]].rename(columns={
+        "order_id": "ID da Venda",
+        "shipment_receiver_name": "Nome do Cliente",
+        "nickname": "Conta"
     })
 
-    df_grouped["Quantidade"] = df_grouped["Quantidade"].astype(int)
+    st.markdown("### 📋 Tabela de Expedição por Venda")
+    st.dataframe(tabela, use_container_width=True, height=500)
 
-    # === Gráfico ===
-    fig_bar = px.bar(
-        df_grouped,
-        x="Hierarquia 1",
-        y="Quantidade",
-        height=400
-    )
+    df_grouped = df.groupby(["level1", "Tipo de Envio"], as_index=False).agg({"quantidade": "sum"})
+    df_grouped = df_grouped.rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
+
+    fig_bar = px.bar(df_grouped, x="Hierarquia 1", y="Quantidade", color="Tipo de Envio", barmode="group", height=400)
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    # === Tabela ===
     st.markdown("### 📋 Tabela de Expedição")
     st.dataframe(df_grouped, use_container_width=True, height=400)
 
-    # === PDF ===
     def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
@@ -1625,8 +1606,8 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             elementos.append(Paragraph(f"[Erro ao gerar gráfico: {str(e)}]", styles["Normal"]))
 
         dados = [tabela_df.columns.tolist()] + tabela_df.values.tolist()
-        tabela = Table(dados, repeatRows=1)
-        tabela.setStyle(TableStyle([
+        tabela_pdf = Table(dados, repeatRows=1)
+        tabela_pdf.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -1635,7 +1616,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
             ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
         ]))
-        elementos.append(tabela)
+        elementos.append(tabela_pdf)
         doc.build(elementos)
 
         pdf_base64 = base64.b64encode(buffer.getvalue()).decode()
