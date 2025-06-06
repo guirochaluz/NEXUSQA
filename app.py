@@ -1539,21 +1539,20 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     col1, col2, col3 = st.columns(3)
     filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
     filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
-    filtro_modo_envio = col3.selectbox("🚛 Modo de Envio:", ["Todos"] + sorted(df["logistic_tipo"].dropna().unique().tolist()))
+    filtro_tipo_envio = col3.selectbox("🚛 Tipo de Envio:", ["Todos"] + sorted(df["Tipo de Envio"].dropna().unique().tolist()))
 
     if filtro_nickname != "Todos":
         df = df[df["nickname"] == filtro_nickname]
     if filtro_hierarquia != "Todos":
         df = df[df["level1"] == filtro_hierarquia]
-    if filtro_modo_envio != "Todos":
-        df = df[df["logistic_tipo"] == filtro_modo_envio]
+    if filtro_tipo_envio != "Todos":
+        df = df[df["Tipo de Envio"] == filtro_tipo_envio]
 
     if df.empty:
         st.warning("Nenhum dado encontrado após todos os filtros.")
         return
 
     df["Canal de Venda"] = "MERCADO LIVRE"
-    df["Quantidade"] = df["quantity"] * df["quantity_sku"]
 
     if "shipment_delivery_limit" in df.columns:
         df["Data Limite do Envio"] = df["shipment_delivery_limit"].dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m/%Y")
@@ -1562,20 +1561,21 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     tabela = df[[
         "order_id", "shipment_receiver_name", "nickname", "Tipo de Envio",
-        "Canal de Venda", "Data Limite do Envio", "Quantidade"
+        "Canal de Venda", "Data Limite do Envio", "quantidade"
     ]].rename(columns={
         "order_id": "ID da Venda",
         "shipment_receiver_name": "Nome do Cliente",
-        "nickname": "Conta"
+        "nickname": "Conta",
+        "quantidade": "Quantidade"
     })
 
     st.markdown("### 📋 Tabela de Expedição por Venda")
     st.dataframe(tabela, use_container_width=True, height=500)
 
-    df_grouped = df.groupby(["level1", "Tipo de Envio"], as_index=False).agg({"quantidade": "sum"})
+    df_grouped = df.groupby("level1", as_index=False).agg({"quantidade": "sum"})
     df_grouped = df_grouped.rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
 
-    fig_bar = px.bar(df_grouped, x="Hierarquia 1", y="Quantidade", color="Tipo de Envio", barmode="group", height=400)
+    fig_bar = px.bar(df_grouped, x="Hierarquia 1", y="Quantidade", barmode="group", height=400)
     st.plotly_chart(fig_bar, use_container_width=True)
 
     st.markdown("### 📋 Tabela de Expedição")
@@ -1625,6 +1625,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     botao_pdf = gerar_relatorio_pdf(df_grouped, fig_bar)
     st.markdown(botao_pdf, unsafe_allow_html=True)
+
 
 
 
