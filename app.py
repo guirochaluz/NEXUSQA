@@ -1578,13 +1578,12 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         return
 
     # === Agrupamento final ===
-    df_grouped = df.groupby(["nickname", "level1", "logistic_tipo"], as_index=False)["quantidade"].sum()
+    df_grouped = df.groupby("level1", as_index=False)["quantidade"].sum()
     df_grouped = df_grouped.rename(columns={
-        "nickname": "Conta",
         "level1": "Hierarquia 1",
-        "logistic_tipo": "Modo de Envio",
         "quantidade": "Quantidade"
     })
+
     df_grouped["Quantidade"] = df_grouped["Quantidade"].astype(int)
 
     # === Gráfico ===
