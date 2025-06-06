@@ -1555,7 +1555,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     df["Canal de Venda"] = "MERCADO LIVRE"
 
     if "shipment_delivery_limit" in df.columns:
-        df["Data Limite do Envio"] = df["shipment_delivery_limit"].dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m/%Y")
+        df["Data Limite do Envio"] = df["shipment_delivery_limit"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m/%Y")
     else:
         df["Data Limite do Envio"] = "—"
 
