@@ -1591,8 +1591,6 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         df_grouped,
         x="Hierarquia 1",
         y="Quantidade",
-        color="Modo de Envio",
-        barmode="group",
         height=400
     )
     st.plotly_chart(fig_bar, use_container_width=True)
