@@ -1484,72 +1484,63 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         st.error("Coluna 'date_adjusted' não encontrada.")
         st.stop()
 
-    col1, col2, col3, col4 = st.columns([1.5, 1.2, 1.2, 1.5])
+    # === PREPARE DATAS ===
+    hoje = pd.Timestamp.now().date()
+    df["data_venda"] = df["date_adjusted"].dt.date
+    if "shipment_delivery_limit" in df.columns:
+        df["data_limite"] = df["shipment_delivery_limit"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.date
+    else:
+        df["data_limite"] = pd.NaT
+
+    data_min_venda = df["data_venda"].min()
+    data_max_venda = df["data_venda"].max()
+    data_min_limite = df["data_limite"].min()
+    data_max_limite = df["data_limite"].max()
+
+    # === LINHA 1: Venda ===
+    st.markdown("#### 🎯 Filtros por Venda")
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        filtro_rapido = st.selectbox("Filtrar Período", [
-            "Período Personalizado", "Hoje", "Ontem", "Últimos 7 Dias",
-            "Este Mês", "Últimos 30 Dias", "Este Ano"
-        ], index=1, key="filtro_quick")
-
-    hoje = pd.Timestamp.now().date()
-    data_min = df["date_adjusted"].dt.date.min()
-    data_max = df["date_adjusted"].dt.date.max()
-
-    if filtro_rapido == "Hoje":
-        de = ate = min(hoje, data_max)
-    elif filtro_rapido == "Ontem":
-        de = ate = hoje - pd.Timedelta(days=1)
-    elif filtro_rapido == "Últimos 7 Dias":
-        de, ate = hoje - pd.Timedelta(days=7), hoje
-    elif filtro_rapido == "Últimos 30 Dias":
-        de, ate = hoje - pd.Timedelta(days=30), hoje
-    elif filtro_rapido == "Este Mês":
-        de, ate = hoje.replace(day=1), hoje
-    elif filtro_rapido == "Este Ano":
-        de, ate = hoje.replace(month=1, day=1), hoje
-    else:
-        de, ate = data_min, data_max
-
-    custom = (filtro_rapido == "Período Personalizado")
-
+        de_venda = st.date_input("Data da Venda (de):", value=data_min_venda, min_value=data_min_venda, max_value=data_max_venda)
     with col2:
-        de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=not custom, key="de_q")
+        ate_venda = st.date_input("Data da Venda (até):", value=data_max_venda, min_value=data_min_venda, max_value=data_max_venda)
     with col3:
-        ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=not custom, key="ate_q")
-    with col4:
-        status_options = df["status"].dropna().unique().tolist()
-        status_opcoes = ["Todos"] + status_options
-        index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
-        status_selecionado = st.selectbox("Status", status_opcoes, index=index_padrao)
+        status_options = df.loc[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda), "status"].dropna().unique().tolist()
+        status = st.selectbox("Status:", ["Todos"] + sorted(status_options))
 
-    df = df[(df["date_adjusted"].dt.date >= de) & (df["date_adjusted"].dt.date <= ate)]
-    if status_selecionado != "Todos":
-        df = df[df["status"] == status_selecionado]
+    # === LINHA 2: Expedição ===
+    st.markdown("#### 🧭 Filtros por Expedição")
+    col4, col5, col6, col7 = st.columns(4)
+
+    with col4:
+        de_limite = st.date_input("Data Limite (de):", value=data_min_limite, min_value=data_min_limite, max_value=data_max_limite)
+    with col5:
+        ate_limite = st.date_input("Data Limite (até):", value=data_max_limite, min_value=data_min_limite, max_value=data_max_limite)
+    with col6:
+        hierarquia1 = st.selectbox("Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
+    with col7:
+        hierarquia2 = st.selectbox("Hierarquia 2:", ["Todos"] + sorted(df["level2"].dropna().unique().tolist()))
+
+    col8, = st.columns(1)
+    with col8:
+        tipo_envio = st.selectbox("Tipo de Envio:", ["Todos"] + sorted(df["Tipo de Envio"].dropna().unique().tolist()))
+
+    # === FILTROS GERAIS ===
+    df = df[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda)]
+    df = df[(df["data_limite"] >= de_limite) & (df["data_limite"] <= ate_limite)]
+
+    if status != "Todos":
+        df = df[df["status"] == status]
+    if hierarquia1 != "Todos":
+        df = df[df["level1"] == hierarquia1]
+    if hierarquia2 != "Todos":
+        df = df[df["level2"] == hierarquia2]
+    if tipo_envio != "Todos":
+        df = df[df["Tipo de Envio"] == tipo_envio]
 
     if df.empty:
         st.warning("Nenhum dado encontrado com os filtros aplicados.")
-        return
-
-    if "ml_user_id" in df.columns and "nickname" not in df.columns:
-        from backend.database import get_user_tokens
-        user_tokens = get_user_tokens()
-        df = df.merge(user_tokens[["ml_user_id", "nickname"]], on="ml_user_id", how="left")
-
-    col1, col2, col3 = st.columns(3)
-    filtro_nickname = col1.selectbox("👤 Conta:", ["Todos"] + sorted(df["nickname"].dropna().unique().tolist()))
-    filtro_hierarquia = col2.selectbox("🧭 Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
-    filtro_tipo_envio = col3.selectbox("🚛 Tipo de Envio:", ["Todos"] + sorted(df["Tipo de Envio"].dropna().unique().tolist()))
-
-    if filtro_nickname != "Todos":
-        df = df[df["nickname"] == filtro_nickname]
-    if filtro_hierarquia != "Todos":
-        df = df[df["level1"] == filtro_hierarquia]
-    if filtro_tipo_envio != "Todos":
-        df = df[df["Tipo de Envio"] == filtro_tipo_envio]
-
-    if df.empty:
-        st.warning("Nenhum dado encontrado após todos os filtros.")
         return
 
     df["Canal de Venda"] = "MERCADO LIVRE"
@@ -1575,11 +1566,16 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     df_grouped = df.groupby("level1", as_index=False).agg({"quantidade": "sum"})
     df_grouped = df_grouped.rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
 
-    fig_bar = px.bar(df_grouped, x="Hierarquia 1", y="Quantidade", barmode="group", height=400)
+    fig_bar = px.bar(
+        df_grouped,
+        x="Hierarquia 1",
+        y="Quantidade",
+        barmode="group",
+        height=400,
+        color_discrete_sequence=["green"]
+    )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    st.markdown("### 📋 Tabela de Expedição")
-    st.dataframe(df_grouped, use_container_width=True, height=400)
 
     def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
         buffer = BytesIO()
