@@ -1546,7 +1546,7 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     if tipo_envio != "Todos":
         df = df[df["Tipo de Envio"] == tipo_envio]
     if conta != "Todos":
-    df = df[df["nickname"] == conta]
+        df = df[df["nickname"] == conta]
 
 
     if df.empty:
