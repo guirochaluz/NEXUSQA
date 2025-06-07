@@ -1507,24 +1507,31 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         ate_venda = st.date_input("Data da Venda (até):", value=data_max_venda, min_value=data_min_venda, max_value=data_max_venda)
     with col3:
         status_options = df.loc[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda), "status"].dropna().unique().tolist()
-        status = st.selectbox("Status:", ["Todos"] + sorted(status_options))
+        status_opcoes = ["Todos"] + sorted(status_options)
+        index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
+        status = st.selectbox("Status:", status_opcoes, index=index_padrao)
 
     # === LINHA 2: Expedição ===
     st.markdown("#### 🧭 Filtros por Expedição")
     col4, col5, col6, col7 = st.columns(4)
 
     with col4:
-        de_limite = st.date_input("Data Limite (de):", value=data_min_limite, min_value=data_min_limite, max_value=data_max_limite)
+        de_limite = st.date_input("Data Limite (de):", value=hoje, min_value=data_min_limite, max_value=data_max_limite)
     with col5:
-        ate_limite = st.date_input("Data Limite (até):", value=data_max_limite, min_value=data_min_limite, max_value=data_max_limite)
+        ate_limite = st.date_input("Data Limite (até):", value=hoje, min_value=data_min_limite, max_value=data_max_limite)
     with col6:
         hierarquia1 = st.selectbox("Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
     with col7:
         hierarquia2 = st.selectbox("Hierarquia 2:", ["Todos"] + sorted(df["level2"].dropna().unique().tolist()))
 
-    col8, = st.columns(1)
+    col8, col9 = st.columns(2)
+    
     with col8:
         tipo_envio = st.selectbox("Tipo de Envio:", ["Todos"] + sorted(df["Tipo de Envio"].dropna().unique().tolist()))
+    
+    with col9:
+        contas_disponiveis = df["nickname"].dropna().unique().tolist()
+        conta = st.selectbox("Conta:", ["Todos"] + sorted(contas_disponiveis))
 
     # === FILTROS GERAIS ===
     df = df[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda)]
@@ -1538,6 +1545,9 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         df = df[df["level2"] == hierarquia2]
     if tipo_envio != "Todos":
         df = df[df["Tipo de Envio"] == tipo_envio]
+    if conta != "Todos":
+    df = df[df["nickname"] == conta]
+
 
     if df.empty:
         st.warning("Nenhum dado encontrado com os filtros aplicados.")
@@ -1552,12 +1562,14 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     tabela = df[[
         "order_id", "shipment_receiver_name", "nickname", "Tipo de Envio",
-        "Canal de Venda", "Data Limite do Envio", "quantidade"
+        "Canal de Venda", "Data Limite do Envio", "quantidade", "level1", "level2"
     ]].rename(columns={
         "order_id": "ID da Venda",
         "shipment_receiver_name": "Nome do Cliente",
         "nickname": "Conta",
-        "quantidade": "Quantidade"
+        "quantidade": "Quantidade",
+        "level1": "Hierarquia 1",
+        "level2": "Hierarquia 2"
     })
 
     st.markdown("### 📋 Tabela de Expedição por Venda")
