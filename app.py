@@ -1561,16 +1561,29 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         df["Data Limite do Envio"] = "—"
 
     tabela = df[[
-        "order_id", "shipment_receiver_name", "nickname", "Tipo de Envio",
-        "Canal de Venda", "Data Limite do Envio", "quantidade", "level1", "level2"
+        "Canal de Venda",     
+        "order_id",                  
+        "shipment_receiver_name",    
+        "nickname",                  
+        "Tipo de Envio",            
+        "quantidade",              
+        "level1",                    
+        "Data Limite do Envio"     
     ]].rename(columns={
-        "order_id": "ID da Venda",
-        "shipment_receiver_name": "Nome do Cliente",
-        "nickname": "Conta",
-        "quantidade": "Quantidade",
-        "level1": "Hierarquia 1",
-        "level2": "Hierarquia 2"
+        "Canal de Venda": "MARKETPLACE",
+        "order_id": "ID VENDA",
+        "shipment_receiver_name": "NOME CLIENTE",
+        "nickname": "CONTA",
+        "Tipo de Envio": "TIPO DE ENVIO",
+        "quantidade": "QUANTIDADE",
+        "level1": "PRODUTO [HIERARQUIA 1]",
+        "Data Limite do Envio": "DATA DE ENVIO"
     })
+
+
+    
+    # Ordenar pela quantidade em ordem decrescente
+    tabela = tabela.sort_values(by="QUANTIDADE", ascending=False)
 
     st.markdown("### 📋 Tabela de Expedição por Venda")
     st.dataframe(tabela, use_container_width=True, height=500)
