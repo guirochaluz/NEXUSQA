@@ -24,14 +24,14 @@ ML_CLIENT_ID   = os.getenv("ML_CLIENT_ID")
 # 2) Agora sim importe o Streamlit e configure a página _antes_ de qualquer outra chamada st.*
 import streamlit as st
 st.set_page_config(
-    page_title="NEXUS Group QA",
+    page_title="NEXUS Group",
     page_icon="favicon.png",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # 3) Depois de set_page_config, importe tudo o mais que precisar
-from sales import sync_all_accounts, get_full_sales, revisar_status_historico, get_incremental_sales, padronizar_status_sales
+from sales import sync_all_accounts, get_full_sales, revisar_status_historico, get_incremental_sales
 from streamlit_cookies_manager import EncryptedCookieManager
 import pandas as pd
 import plotly.express as px
@@ -47,6 +47,8 @@ from textblob import TextBlob
 import io
 from datetime import datetime, timedelta
 from utils import engine, DATA_INICIO, buscar_ml_fee
+import time
+
 
 
 
@@ -350,7 +352,6 @@ def mostrar_dashboard():
     if "vendas_sincronizadas" not in st.session_state:
         with st.spinner("🔄 Sincronizando vendas..."):
             count = sync_all_accounts()
-            padronizar_status_sales(engine)  # 👈 Aqui entra a padronização após sincronizar
             st.cache_data.clear()
         placeholder = st.empty()
         with placeholder:
@@ -364,7 +365,10 @@ def mostrar_dashboard():
     if df_full.empty:
         st.warning("Nenhuma venda cadastrada.")
         return
-    
+        
+    # ✅ TRADUZ STATUS AQUI
+    from sales import traduzir_status
+    df_full["status"] = df_full["status"].map(traduzir_status)
 
     # --- CSS para compactar inputs e remover espaços ---
     st.markdown(
@@ -437,7 +441,7 @@ def mostrar_dashboard():
     hoje = pd.Timestamp.now().date()
     data_min = df_full["date_adjusted"].dt.date.min()
     data_max = df_full["date_adjusted"].dt.date.max()
-
+    
     if filtro_rapido == "Hoje":
         de = ate = min(hoje, data_max)
     elif filtro_rapido == "Ontem":
@@ -452,39 +456,29 @@ def mostrar_dashboard():
         de, ate = hoje.replace(month=1, day=1), hoje
     else:
         de, ate = data_min, data_max
-
+    
     custom = (filtro_rapido == "Período Personalizado")
-
+    
     with col2:
-        de = st.date_input(
-            "De", value=de,
-            min_value=data_min, max_value=data_max,
-            disabled=not custom,
-            key="de_q"
-        )
-
+        de = st.date_input("De", value=de, min_value=data_min, max_value=data_max, disabled=not custom, key="de_q")
+    
     with col3:
-        ate = st.date_input(
-            "Até", value=ate,
-            min_value=data_min, max_value=data_max,
-            disabled=not custom,
-            key="ate_q"
-        )
-
+        ate = st.date_input("Até", value=ate, min_value=data_min, max_value=data_max, disabled=not custom, key="ate_q")
+    
     with col4:
         status_options = df_full["status"].dropna().unique().tolist()
         status_opcoes = ["Todos"] + status_options
         index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
-        
         status_selecionado = st.selectbox("Status", status_opcoes, index=index_padrao)
-
-        # --- Filtro de datas e status ---
+    
+    # Aplica filtros finais
     df = df_full[
         (df_full["date_adjusted"].dt.date >= de) &
         (df_full["date_adjusted"].dt.date <= ate)
     ]
     if status_selecionado != "Todos":
         df = df[df["status"] == status_selecionado]
+
     
     # --- Filtros Avançados com checkbox dentro de Expander ---
     with st.expander("🔍 Filtros Avançados", expanded=False):
@@ -591,8 +585,9 @@ def mostrar_dashboard():
     # =================== Gráfico de Linha + Barra de Proporção ===================
     st.markdown("### 💵 Total Vendido por Período")
     
-    # 🔘 Seletor de período + agrupamento lado a lado
-    colsel1, colsel2 = st.columns([1, 1])
+    # 🔘 Seletor de período + agrupamento + métrica lado a lado
+    colsel1, colsel2, colsel3 = st.columns([1.2, 1.2, 1.6])
+
     
     with colsel1:
         st.markdown("**📆 Período**")
@@ -611,6 +606,16 @@ def mostrar_dashboard():
             horizontal=True,
             key="modo_agregacao"
         )
+
+    with colsel3:
+        st.markdown("**📏 Métrica da Barra**")
+        metrica_barra = st.radio(
+            "Métrica",
+            ["Faturamento", "Qtd. Vendas", "Qtd. Unidades"],
+            horizontal=True,
+            key="metrica_barra"
+        )
+
 
     
     df_plot = df.copy()
@@ -692,18 +697,46 @@ def mostrar_dashboard():
     
     # 📊 Gráfico de barra proporcional (somente se Por Conta)
     if modo_agregacao == "Por Conta" and not total_por_conta.empty:
-        total_por_conta["percentual"] = total_por_conta["total"] / total_por_conta["total"].sum()
+
     
-        def formatar_reais(valor):
-            return f"R$ {valor:,.0f}".replace(",", "v").replace(".", ",").replace("v", ".")
+        if metrica_barra == "Faturamento":
+            base = (
+                df_plot.groupby("nickname")["total_amount"]
+                .sum()
+                .reset_index(name="valor")
+            )
+        elif metrica_barra == "Qtd. Vendas":
+            base = (
+                df_plot.groupby("nickname")
+                .size()
+                .reset_index(name="valor")
+            )
+        else:  # Qtd. Unidades
+            base = (
+                df_plot.groupby("nickname")
+                .apply(lambda x: (x["quantity_sku"] * x["quantity"]).sum())
+                .reset_index(name="valor")
+            )
     
-        total_por_conta["texto"] = total_por_conta.apply(
-            lambda row: f"{row['percentual']:.0%} ({formatar_reais(row['total'])})", axis=1
+        base = base.sort_values("valor", ascending=False)
+        base["percentual"] = base["valor"] / base["valor"].sum()
+    
+        # 🏷️ Texto das barras
+        def formatar_valor(v):
+            if metrica_barra == "Faturamento":
+                return f"R$ {v:,.0f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            elif metrica_barra == "Qtd. Vendas":
+                return f"{int(v)} vendas"
+            else:
+                return f"{int(v)} unid."
+    
+        base["texto"] = base.apply(
+            lambda row: f"{row['percentual']:.0%} ({formatar_valor(row['valor'])})", axis=1
         )
-        total_por_conta["grupo"] = "Contas"
+        base["grupo"] = "Contas"
     
         fig_bar = px.bar(
-            total_por_conta,
+            base,
             x="grupo",
             y="percentual",
             color="nickname",
@@ -879,30 +912,52 @@ def mostrar_contas_cadastradas():
     with col_b:
         if st.button("♻️ Reprocessar Histórico de Vendas", use_container_width=True):
             with st.spinner("♻️ Atualizando histórico de todas as vendas..."):
-                for row in df.itertuples(index=False):
+                total = len(df)
+                progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
+                
+                for i, row in enumerate(df.itertuples(index=False)):
                     ml_user_id = str(row.ml_user_id)
                     access_token = row.access_token
                     nickname = row.nickname
-
-                    st.subheader(f"🔗 Conta: {nickname}")
+                
+                    st.write(f"▶️ Processando conta {nickname}...")
                     atualizadas, _ = revisar_status_historico(ml_user_id, access_token, return_changes=False)
-                    st.info(f"♻️ {atualizadas} vendas atualizadas com dados mais recentes.")
+                    st.info(f"♻️ {atualizadas} vendas atualizadas para a conta {nickname}.")
+                    st.write(f"✅ Conta {nickname} finalizada.\n---")
+                    
+                    progresso.progress((i + 1) / total, text=f"⏳ {i + 1}/{total} contas processadas...")
+                    time.sleep(0.1)
+                
+                st.success("✅ Reprocessamento completo!")
+                progresso.empty()
 
-                # ✅ Executa padronização depois de todas as contas
-                padronizar_status_sales(engine)
+
+
                 st.success("✅ Todos os status foram padronizados com sucesso.")
                     
     with col_c:
         if st.button("📜 Procurar novas vendas históricas", use_container_width=True):
             with st.spinner("📜 Reprocessando histórico completo..."):
-                for row in df.itertuples(index=False):
+                total = len(df)
+                progresso_geral = st.progress(0, text="🔁 Iniciando reprocessamento...")
+            
+                for i, row in enumerate(df.itertuples(index=False)):
                     ml_user_id = str(row.ml_user_id)
                     access_token = row.access_token
                     nickname = row.nickname
-
+            
                     st.subheader(f"🔗 Conta: {nickname}")
                     novas = get_full_sales(ml_user_id, access_token)
+                    atualizadas, _ = revisar_status_historico(ml_user_id, access_token, return_changes=False)
+            
                     st.success(f"✅ {novas} vendas históricas importadas.")
+                    st.info(f"♻️ {atualizadas} vendas com status alterados.")
+            
+                    progresso_geral.progress((i + 1) / total, text=f"⏳ Progresso: {i+1}/{total} contas processadas")
+            
+                st.success("✅ Reprocessamento completo.")
+                progresso_geral.empty()
+
 
     # --- Seção por conta individual ---
     for row in df.itertuples(index=False):
@@ -942,14 +997,19 @@ def mostrar_contas_cadastradas():
             with col3:
                 if st.button("📜 Histórico Completo", key=f"historico_{ml_user_id}"):
                     progresso = st.progress(0, text="🔁 Iniciando reprocessamento...")
+                
                     with st.spinner("📜 Importando histórico completo..."):
                         novas = get_full_sales(ml_user_id, access_token)
+                        progresso.progress(50, text="📦 Importação finalizada. Atualizando status...")
+                
                         atualizadas, alteracoes = revisar_status_historico(ml_user_id, access_token, return_changes=True)
                         progresso.progress(100, text="✅ Concluído!")
+                
                         st.success(f"✅ {novas} vendas históricas importadas.")
                         st.info(f"♻️ {atualizadas} vendas com status alterados.")
                         st.cache_data.clear()
                     progresso.empty()
+
 
                     if alteracoes:
                         df_alt = pd.DataFrame(alteracoes, columns=["order_id", "status_antigo", "status_novo"])
@@ -1487,10 +1547,11 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     # === PREPARE DATAS ===
     hoje = pd.Timestamp.now().date()
     df["data_venda"] = df["date_adjusted"].dt.date
-    if "shipment_delivery_limit" in df.columns:
-        df["data_limite"] = df["shipment_delivery_limit"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.date
+    if "shipment_buffering_date" in df.columns:
+        df["data_limite"] = df["shipment_buffering_date"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.date
     else:
         df["data_limite"] = pd.NaT
+
 
     data_min_venda = df["data_venda"].dropna().min()
     data_max_venda = df["data_venda"].dropna().max()
@@ -1500,38 +1561,45 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
     # === LINHA 1: Venda ===
     st.markdown("#### 🎯 Filtros por Venda")
     col1, col2, col3 = st.columns(3)
-
+    
     with col1:
         de_venda = st.date_input("Data da Venda (de):", value=data_min_venda, min_value=data_min_venda, max_value=data_max_venda)
     with col2:
         ate_venda = st.date_input("Data da Venda (até):", value=data_max_venda, min_value=data_min_venda, max_value=data_max_venda)
-    with col3:
-        status_options = df.loc[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda), "status"].dropna().unique().tolist()
-        status_opcoes = ["Todos"] + sorted(status_options)
-        index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
-        status = st.selectbox("Status:", status_opcoes, index=index_padrao)
-
+    
     # === LINHA 2: Expedição ===
     st.markdown("#### 🧭 Filtros por Expedição")
     col4, col5, col6, col7 = st.columns(4)
-
+    
     with col4:
         de_limite = st.date_input("Data Limite (de):", value=hoje, min_value=data_min_limite, max_value=data_max_limite)
     with col5:
         ate_limite = st.date_input("Data Limite (até):", value=hoje, min_value=data_min_limite, max_value=data_max_limite)
+    
+    # === APLICAR DATA TEMPORARIAMENTE PARA OPÇÕES DE FILTRO ===
+    df_datas = df[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda) &
+                  (df["data_limite"] >= de_limite) & (df["data_limite"] <= ate_limite)]
+    
     with col6:
-        hierarquia1 = st.selectbox("Hierarquia 1:", ["Todos"] + sorted(df["level1"].dropna().unique().tolist()))
+        hierarquia1 = st.selectbox("Hierarquia 1:", ["Todos"] + sorted(df_datas["level1"].dropna().unique().tolist()))
     with col7:
-        hierarquia2 = st.selectbox("Hierarquia 2:", ["Todos"] + sorted(df["level2"].dropna().unique().tolist()))
-
+        hierarquia2 = st.selectbox("Hierarquia 2:", ["Todos"] + sorted(df_datas["level2"].dropna().unique().tolist()))
+    
     col8, col9 = st.columns(2)
     
     with col8:
-        tipo_envio = st.selectbox("Tipo de Envio:", ["Todos"] + sorted(df["Tipo de Envio"].dropna().unique().tolist()))
+        tipo_envio = st.selectbox("Tipo de Envio:", ["Todos"] + sorted(df_datas["Tipo de Envio"].dropna().unique().tolist()))
     
     with col9:
-        contas_disponiveis = df["nickname"].dropna().unique().tolist()
+        contas_disponiveis = df_datas["nickname"].dropna().unique().tolist()
         conta = st.selectbox("Conta:", ["Todos"] + sorted(contas_disponiveis))
+    
+    with st.container():
+        status_options = df_datas["status"].dropna().unique().tolist()
+        status_opcoes = ["Todos"] + sorted(status_options)
+        index_padrao = status_opcoes.index("Pago") if "Pago" in status_opcoes else 0
+        status = st.selectbox("Status:", status_opcoes, index=index_padrao)
+
 
     # === FILTROS GERAIS ===
     df = df[(df["data_venda"] >= de_venda) & (df["data_venda"] <= ate_venda)]
@@ -1555,13 +1623,13 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     df["Canal de Venda"] = "MERCADO LIVRE"
 
-    if "shipment_delivery_limit" in df.columns:
-        df["Data Limite do Envio"] = df["shipment_delivery_limit"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m/%Y")
+    if "shipment_buffering_date" in df.columns:
+        df["Data Limite do Envio"] = df["shipment_buffering_date"].dt.tz_localize("UTC").dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m/%Y")
     else:
         df["Data Limite do Envio"] = "—"
 
+
     tabela = df[[
-        "Canal de Venda",     
         "order_id",                  
         "shipment_receiver_name",    
         "nickname",                  
@@ -1570,7 +1638,6 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         "level1",                    
         "Data Limite do Envio"     
     ]].rename(columns={
-        "Canal de Venda": "MARKETPLACE",
         "order_id": "ID VENDA",
         "shipment_receiver_name": "NOME CLIENTE",
         "nickname": "CONTA",
@@ -1579,7 +1646,6 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
         "level1": "PRODUTO [HIERARQUIA 1]",
         "Data Limite do Envio": "DATA DE ENVIO"
     })
-
 
     
     # Ordenar pela quantidade em ordem decrescente
@@ -1590,42 +1656,74 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
 
     df_grouped = df.groupby("level1", as_index=False).agg({"quantidade": "sum"})
     df_grouped = df_grouped.rename(columns={"level1": "Hierarquia 1", "quantidade": "Quantidade"})
-
+    
+    # Ordenar do maior para o menor
+    df_grouped = df_grouped.sort_values(by="Quantidade", ascending=False)
+    
     fig_bar = px.bar(
         df_grouped,
         x="Hierarquia 1",
         y="Quantidade",
+        text="Quantidade",  # Adiciona o rótulo
         barmode="group",
         height=400,
         color_discrete_sequence=["green"]
     )
+    
+    # Ajustar posição dos rótulos (em cima)
+    fig_bar.update_traces(textposition="outside")
+    
+    # Ajustar layout para não cortar os rótulos
+    fig_bar.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', margin=dict(t=40, b=40))
+    
     st.plotly_chart(fig_bar, use_container_width=True)
 
 
-    def gerar_relatorio_pdf(tabela_df: pd.DataFrame, grafico_plotly):
+    # === TABELAS LADO A LADO ===
+    st.markdown("### 📊 Resumo por Agrupamento")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Tabela 1: Hierarquia 1
+    with col1:
+        df_h1 = df.groupby("level1", as_index=False)["quantidade"].sum().rename(columns={
+            "level1": "Hierarquia 1", "quantidade": "Quantidade"
+        })
+        st.dataframe(df_h1, use_container_width=True, hide_index=True)
+    
+    # Tabela 2: Hierarquia 2
+    with col2:
+        df_h2 = df.groupby("level2", as_index=False)["quantidade"].sum().rename(columns={
+            "level2": "Hierarquia 2", "quantidade": "Quantidade"
+        })
+        st.dataframe(df_h2, use_container_width=True, hide_index=True)
+    
+    # Tabela 3: Tipo de Envio
+    with col3:
+        df_tipo = df.groupby("Tipo de Envio", as_index=False)["quantidade"].sum().rename(columns={
+            "Tipo de Envio": "Tipo de Envio", "quantidade": "Quantidade"
+        })
+        st.dataframe(df_tipo, use_container_width=True, hide_index=True)
+
+
+    def gerar_relatorio_pdf(tabela_df: pd.DataFrame, df_h1: pd.DataFrame, df_h2: pd.DataFrame, df_tipo: pd.DataFrame):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
         styles = getSampleStyleSheet()
         elementos = []
-
+    
         try:
             logo = Image("favicon.png", width=60, height=60)
             elementos.append(logo)
         except:
             elementos.append(Paragraph("[Logo não encontrada: favicon.png]", styles["Normal"]))
-
+    
         elementos.append(Spacer(1, 12))
-        elementos.append(Paragraph("📦 Relatório de Expedição e Logística", styles["Title"]))
+        elementos.append(Paragraph("Relatório de Expedição e Logística", styles["Title"]))
         elementos.append(Spacer(1, 12))
-
-        try:
-            img_bytes = to_image(grafico_plotly, format="png", width=700, height=400, scale=2)
-            img_buffer = BytesIO(img_bytes)
-            elementos.append(Image(img_buffer, width=480, height=270))
-            elementos.append(Spacer(1, 12))
-        except Exception as e:
-            elementos.append(Paragraph(f"[Erro ao gerar gráfico: {str(e)}]", styles["Normal"]))
-
+    
+        # === Tabela principal ===
+        elementos.append(Paragraph("", styles["Heading2"]))
         dados = [tabela_df.columns.tolist()] + tabela_df.values.tolist()
         tabela_pdf = Table(dados, repeatRows=1)
         tabela_pdf.setStyle(TableStyle([
@@ -1633,20 +1731,52 @@ def mostrar_expedicao_logistica(df: pd.DataFrame):
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 5),
             ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
         ]))
         elementos.append(tabela_pdf)
+        elementos.append(Spacer(1, 20))
+        
+        from reportlab.platypus import KeepTogether
+        
+        def montar_tabela(df, titulo):
+            dados = [df.columns.tolist()] + df.values.tolist()
+            tab = Table(dados, repeatRows=1)
+            tab.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 5),
+                ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
+            ]))
+            return [Paragraph(titulo, styles["Heading3"]), Spacer(1, 4), tab]
+    
+        # Montar cada célula com um "mini flowable" contendo título + tabela
+        col1 = montar_tabela(df_h1, "Hierarquia 1")
+        col2 = montar_tabela(df_h2, "Hierarquia 2")
+        col3 = montar_tabela(df_tipo, "Tipo de Envio")
+    
+        # Colocar as três colunas lado a lado
+        tabela_lado_a_lado = Table([[col1, col2, col3]], colWidths=[170, 170, 170])
+        tabela_lado_a_lado.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP')
+        ]))
+    
+        elementos.append(Spacer(1, 12))
+        elementos.append(tabela_lado_a_lado)
+    
         doc.build(elementos)
-
+    
         pdf_base64 = base64.b64encode(buffer.getvalue()).decode()
         href = f'<a href="data:application/pdf;base64,{pdf_base64}" download="relatorio_expedicao.pdf">📄 Baixar Relatório em PDF</a>'
         return href
 
-    botao_pdf = gerar_relatorio_pdf(df_grouped, fig_bar)
-    st.markdown(botao_pdf, unsafe_allow_html=True)
 
+    botao_pdf = gerar_relatorio_pdf(tabela, df_h1, df_h2, df_tipo)
+    st.markdown(botao_pdf, unsafe_allow_html=True)
 
 
 

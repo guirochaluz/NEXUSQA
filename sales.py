@@ -1,18 +1,15 @@
 import os
-import sys
 import requests
 from dateutil import parser
 from db import SessionLocal
 from models import Sale
 from sqlalchemy import func, text, create_engine
-from typing import Optional, Tuple, List
 from dotenv import load_dotenv
 from dateutil.tz import tzutc
 from requests.exceptions import HTTPError
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional, List, Tuple
 import time
 
 # Carrega variáveis de ambiente
@@ -22,95 +19,8 @@ BACKEND_URL = os.getenv("BACKEND_URL")
 API_BASE = "https://api.mercadolibre.com/orders/search"
 FULL_PAGE_SIZE = 50
 
-def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional[SessionLocal] = None) -> Sale:
-    internal_session = False
-    if db is None:
-        db = SessionLocal()
-        internal_session = True
-
-    try:
-        order_id = order.get("id")
-
-        try:
-            resp = requests.get(f"https://api.mercadolibre.com/orders/{order_id}?access_token={access_token}")
-            resp.raise_for_status()
-            order = resp.json()
-            print(f"✅ Order {order_id} complementada com dados completos")
-        except Exception as e:
-            print(f"⚠️ Erro ao complementar order {order_id}: {e}")
-
-        payments = order.get("payments")
-        if not payments:
-            try:
-                pay_resp = requests.get(f"https://api.mercadolibre.com/orders/{order_id}/payments?access_token={access_token}")
-                pay_resp.raise_for_status()
-                payments = pay_resp.json()
-                if isinstance(payments, list) and payments:
-                    print(f"✅ Payments recuperados separadamente para {order_id}")
-                    order["payments"] = payments
-            except Exception as e:
-                print(f"❌ Erro ao buscar payments separadamente: {e}")
-
-        buyer = order.get("buyer", {}) or {}
-        item = (order.get("order_items") or [{}])[0]
-        item_inf = item.get("item", {}) or {}
-        ship = order.get("shipping") or {}
-
-        seller_sku = item_inf.get("seller_sku")
-        quantity_sku = custo_unitario = level1 = level2 = None
-
-        if seller_sku:
-            sku_info = db.execute(text("""
-                SELECT quantity, custo_unitario, level1, level2
-                FROM sku
-                WHERE sku = :sku
-                ORDER BY date_created DESC
-                LIMIT 1
-            """), {"sku": seller_sku}).fetchone()
-
-            if sku_info:
-                quantity_sku, custo_unitario, level1, level2 = sku_info
-
-        payment_info = (order.get("payments") or [{}])[0]
-        payment_id = payment_info.get("id")
-        marketplace_fee = payment_info.get("marketplace_fee")
-
-        print(f"📦 Finalizando order {order_id} | ml_fee: {marketplace_fee}")
-
-        return Sale(
-            order_id=str(order.get("id")),
-            ml_user_id=int(ml_user_id),
-            buyer_id=buyer.get("id"),
-            buyer_nickname=buyer.get("nickname"),
-            total_amount=order.get("total_amount"),
-            status=order.get("status"),
-            date_closed=parser.isoparse(order.get("date_closed")),
-            item_id=item_inf.get("id"),
-            item_title=item_inf.get("title"),
-            quantity=item.get("quantity"),
-            unit_price=item.get("unit_price"),
-            shipping_id=ship.get("id"),
-            seller_sku=seller_sku,
-            quantity_sku=quantity_sku,
-            custo_unitario=custo_unitario,
-            level1=level1,
-            level2=level2,
-            ml_fee=marketplace_fee,
-            payment_id=payment_id,
-        )
-
-    finally:
-        if internal_session:
-            db.close()
-
 def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
-    from db import SessionLocal
-    from models import Sale
-    from sqlalchemy import func, text
     from sales import get_full_sales, _order_to_sale
-    from dateutil.tz import tzutc
-    import requests
-    from requests.exceptions import HTTPError
     import os
     from concurrent.futures import ThreadPoolExecutor
     from utils import buscar_ml_fee, engine, DATA_INICIO
@@ -190,6 +100,9 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
 
             full_order = full_resp.json()
             nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+            buffering_info = nova_venda.shipment_buffering_date.isoformat() if nova_venda.shipment_buffering_date else "None"
+            print(f"📦 shipment_buffering_date para {oid}: {buffering_info}")
+
             print(f"📦 Incremental - ordem {oid} processada | ml_fee: {nova_venda.ml_fee}")
 
             if not existing_sale:
@@ -244,12 +157,8 @@ def get_incremental_sales(ml_user_id: str, access_token: str) -> int:
 
 
 def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional[SessionLocal] = None) -> Sale:
-    from models import Sale
-    from db import SessionLocal
     from sqlalchemy import text
     from dateutil import parser, tz
-    import requests
-
     def to_sp_datetime(value: Optional[str]):
         if not value:
             return None
@@ -329,13 +238,19 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             except Exception as e:
                 print(f"⚠️ Falha ao buscar shipment {shipment_id}: {e}")
 
+        shipment_buffering_date = to_sp_datetime(
+            shipment_data.get("shipping_option", {})
+                         .get("buffering", {})
+                         .get("date")
+        )
+
         return Sale(
             order_id         = str(order_id),
             ml_user_id       = int(ml_user_id),
             buyer_id         = buyer.get("id"),
             buyer_nickname   = buyer.get("nickname"),
             total_amount     = order.get("total_amount"),
-            status           = order.get("status"),
+            status = order.get("status"),
             date_closed      = to_sp_datetime(order.get("date_closed")),
             item_id          = item_inf.get("id"),
             item_title       = item_inf.get("title"),
@@ -349,6 +264,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             level2           = level2,
             ml_fee           = marketplace_fee,
             payment_id       = payment_id,
+            
 
             # 🆕 Dados de envio
             shipment_status             = shipment_data.get("status"),
@@ -362,6 +278,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             shipment_delivery_limit     = to_sp_datetime(shipment_data.get("shipping_option", {}).get("estimated_delivery_limit", {}).get("date")),
             shipment_delivery_final     = to_sp_datetime(shipment_data.get("shipping_option", {}).get("estimated_delivery_final", {}).get("date")),
             shipment_receiver_name      = shipment_data.get("receiver_address", {}).get("receiver_name"),
+            shipment_buffering_date = shipment_buffering_date,
         )
 
     finally:
@@ -369,16 +286,11 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             db.close()
 
 
-
 def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
-    from dateutil.tz import tzutc
-    from db import SessionLocal
-    from models import Sale
     from sales import _order_to_sale
     from sqlalchemy import func
-    import requests
 
     print(f"🔁 Iniciando revisão histórica para usuário {ml_user_id}")
 
@@ -444,6 +356,7 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
 
                     full_order = full_resp.json()
                     nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
+
                     print(f"🔄 Atualizando venda {oid} | status: {old_status} → {nova_venda.status} | ml_fee: {nova_venda.ml_fee}")
 
                     for attr, value in nova_venda.__dict__.items():
@@ -474,48 +387,11 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
 
 
-
-def padronizar_status_sales(engine):
-    """
-    Padroniza os status da tabela 'sales':
-    - Converte todas as variações de 'paid' para 'Pago'
-    - Todos os demais status serão definidos como 'Cancelado'
-    """
-    from sqlalchemy import text
-
-    print("🔧 Iniciando padronização dos status de vendas...")
-
-    try:
-        with engine.begin() as conn:
-            # Atualiza para 'Pago' onde for 'paid' (ignorando maiúsculas/minúsculas)
-            result_pago = conn.execute(text("""
-                UPDATE sales
-                SET status = 'Pago'
-                WHERE LOWER(status) = 'paid'
-            """))
-            print(f"✅ Linhas atualizadas para 'Pago': {result_pago.rowcount}")
-
-            # Define como 'Cancelado' tudo que não for 'Pago'
-            result_cancelado = conn.execute(text("""
-                UPDATE sales
-                SET status = 'Cancelado'
-                WHERE status != 'Pago'
-            """))
-            print(f"✅ Linhas atualizadas para 'Cancelado': {result_cancelado.rowcount}")
-
-        print("🎯 Padronização finalizada com sucesso.")
-
-    except Exception as e:
-        print(f"❌ Erro ao padronizar status: {e}")
-        raise
-
-
 def sync_all_accounts() -> int:
     """
     Sincroniza todas as contas cadastradas na tabela user_tokens,
     utilizando a função incremental para buscar novas vendas.
     """
-    from db import SessionLocal
     from sqlalchemy import text
     from sales import get_incremental_sales
 
@@ -546,12 +422,8 @@ def sync_all_accounts() -> int:
 def get_full_sales(ml_user_id: str, access_token: str) -> int:
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
-    from dateutil.tz import tzutc
     from sales import _order_to_sale
-    from db import SessionLocal
-    from models import Sale
     from sqlalchemy import func
-    import requests
 
     API_BASE = "https://api.mercadolibre.com/orders/search"
     FULL_PAGE_SIZE = 50
@@ -641,3 +513,19 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
 
     return total_saved
 
+from typing import Optional
+
+def traduzir_status(status_original: Optional[str]) -> str:
+    if not status_original:
+        return "Desconhecido"
+    
+    s = status_original.lower()
+
+    if s == "paid":
+        return "Pago"
+    elif s == "partially_refunded":
+        return "Parcialmente pago"
+    elif s in ("cancelled", "canceled"):
+        return "Cancelado"
+    
+    return status_original
