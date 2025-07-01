@@ -9,7 +9,7 @@ from dateutil.tz import tzutc
 from requests.exceptions import HTTPError
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import time
 
 # Carrega variáveis de ambiente
@@ -227,6 +227,8 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
         # 📦 Shipment enrichment
         shipment_id = ship.get("id")
         shipment_data = {}
+        shipment_delivery_sla = None          # 👈  garante que a variável existe
+
         if shipment_id:
             try:
                 shipment_resp = requests.get(
@@ -235,6 +237,24 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
                 shipment_resp.raise_for_status()
                 shipment_data = shipment_resp.json()
                 print(f"📮 Dados logísticos carregados para order {order_id}")
+
+                try:
+                    sla_resp = requests.get(
+                        f"https://api.mercadolibre.com/shipments/{shipment_id}/sla",
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if sla_resp.ok:
+                        sla_data = sla_resp.json()
+                        shipment_delivery_sla_raw = sla_data.get("expected_date")
+                        print(f"📦 SLA bruto retornado: {sla_data}")
+                        print(f"📅 SLA estimado: {shipment_delivery_sla_raw}")
+                        shipment_delivery_sla = to_sp_datetime(shipment_delivery_sla_raw)
+                    else:
+                        print(f"⚠️ SLA não disponível para shipment {shipment_id}: {sla_resp.status_code}")
+                except Exception as e:
+                    print(f"❌ Erro ao buscar SLA de shipment {shipment_id}: {e}")
+
+
             except Exception as e:
                 print(f"⚠️ Falha ao buscar shipment {shipment_id}: {e}")
 
@@ -243,7 +263,8 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
                          .get("buffering", {})
                          .get("date")
         )
-
+        
+        print(f"✅ shipment_delivery_sla final (já convertido): {shipment_delivery_sla}")
         return Sale(
             order_id         = str(order_id),
             ml_user_id       = int(ml_user_id),
@@ -279,6 +300,7 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             shipment_delivery_final     = to_sp_datetime(shipment_data.get("shipping_option", {}).get("estimated_delivery_final", {}).get("date")),
             shipment_receiver_name      = shipment_data.get("receiver_address", {}).get("receiver_name"),
             shipment_buffering_date = shipment_buffering_date,
+            shipment_delivery_sla = shipment_delivery_sla
         )
 
     finally:
@@ -286,17 +308,17 @@ def _order_to_sale(order: dict, ml_user_id: str, access_token: str, db: Optional
             db.close()
 
 
-def revisar_status_historico(ml_user_id: str, access_token: str, return_changes: bool = False) -> Tuple[int, List[Tuple[str, str, str]]]:
-    from datetime import datetime, timedelta
+def revisar_banco_de_dados(ml_user_id: str, access_token: str, return_changes: bool = False) -> Dict[str, int]:
+    from datetime import timedelta
     from dateutil.relativedelta import relativedelta
     from sales import _order_to_sale
     from sqlalchemy import func
+    from dateutil.tz import tzutc
 
     print(f"🔁 Iniciando revisão histórica para usuário {ml_user_id}")
-
     db = SessionLocal()
+    novas = 0
     atualizadas = 0
-    alteracoes = []
 
     try:
         data_min = db.query(func.min(Sale.date_closed)).filter(Sale.ml_user_id == int(ml_user_id)).scalar()
@@ -304,16 +326,16 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
 
         if not data_min or not data_max:
             print("⚠️ Nenhuma venda encontrada no histórico para revisar.")
-            return atualizadas, alteracoes
+            return {"novas": 0, "atualizadas": 0}
 
         if data_min.tzinfo is None:
             data_min = data_min.replace(tzinfo=tzutc())
         if data_max.tzinfo is None:
             data_max = data_max.replace(tzinfo=tzutc())
 
-        current_start = data_min.replace(day=1)
+        current_start = data_max.replace(day=1)
 
-        while current_start <= data_max:
+        while current_start >= data_min:
             current_end = (current_start + relativedelta(months=1)) - timedelta(seconds=1)
             print(f"📅 Revisando intervalo: {current_start.date()} → {current_end.date()}")
             offset = 0
@@ -336,20 +358,15 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
 
                 orders = resp.json().get("results", [])
                 if not orders:
-                    print("⛔ Nenhuma venda nesse intervalo.")
                     break
+
+                commit_necessario = False
 
                 for order in orders:
                     oid = str(order["id"])
                     existing_sale = db.query(Sale).filter_by(order_id=oid).first()
 
-                    if not existing_sale:
-                        print(f"🟨 Venda {oid} não encontrada no banco. Pulando...")
-                        continue
-
-                    old_status = existing_sale.status
                     full_resp = requests.get(f"https://api.mercadolibre.com/orders/{oid}?access_token={access_token}")
-
                     if not full_resp.ok:
                         print(f"⚠️ Falha ao buscar dados completos da venda {oid}: {full_resp.status_code}")
                         continue
@@ -357,24 +374,35 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
                     full_order = full_resp.json()
                     nova_venda = _order_to_sale(full_order, ml_user_id, access_token, db)
 
-                    print(f"🔄 Atualizando venda {oid} | status: {old_status} → {nova_venda.status} | ml_fee: {nova_venda.ml_fee}")
+                    if not existing_sale:
+                        db.add(nova_venda)
+                        novas += 1
+                        commit_necessario = True
+                        print(f"🟢 Venda {oid} inserida.")
+                        continue
 
+                    houve_mudanca = False
                     for attr, value in nova_venda.__dict__.items():
-                        if attr != "_sa_instance_state":
+                        if attr in ["_sa_instance_state", "id"]:
+                            continue
+                        antigo = getattr(existing_sale, attr, None)
+                        if antigo != value:
                             setattr(existing_sale, attr, value)
+                            houve_mudanca = True
 
-                    if return_changes and old_status != nova_venda.status:
-                        alteracoes.append((oid, old_status, nova_venda.status))
+                    if houve_mudanca:
+                        atualizadas += 1
+                        commit_necessario = True
+                        print(f"🔄 Venda {oid} atualizada.")
 
-                    atualizadas += 1
-
-                db.commit()
+                if commit_necessario:
+                    db.commit()
 
                 if len(orders) < 50:
                     break
                 offset += 50
 
-            current_start += relativedelta(months=1)
+            current_start -= relativedelta(months=1)
 
     except Exception as e:
         db.rollback()
@@ -383,8 +411,9 @@ def revisar_status_historico(ml_user_id: str, access_token: str, return_changes:
     finally:
         db.close()
 
-    print(f"✅ Revisão finalizada. Total de vendas atualizadas: {atualizadas}")
-    return (atualizadas, alteracoes) if return_changes else (atualizadas, [])
+    print(f"✅ Revisão finalizada. Novas: {novas}, Atualizadas: {atualizadas}")
+    return {"novas": novas, "atualizadas": atualizadas}
+
 
 
 def sync_all_accounts() -> int:
@@ -445,9 +474,9 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
         if data_max.tzinfo is None:
             data_max = data_max.replace(tzinfo=tzutc())
 
-        current_start = data_min.replace(day=1)
+        current_start = data_max.replace(day=1)
 
-        while current_start <= data_max:
+        while current_start >= data_min:
             current_end = (current_start + relativedelta(months=1)) - timedelta(seconds=1)
             offset = 0
 
@@ -503,7 +532,7 @@ def get_full_sales(ml_user_id: str, access_token: str) -> int:
 
                 offset += FULL_PAGE_SIZE
 
-            current_start += relativedelta(months=1)
+            current_start -= relativedelta(months=1)
 
     except Exception as e:
         db.rollback()
@@ -518,14 +547,10 @@ from typing import Optional
 def traduzir_status(status_original: Optional[str]) -> str:
     if not status_original:
         return "Desconhecido"
-    
+
     s = status_original.lower()
 
     if s == "paid":
         return "Pago"
-    elif s == "partially_refunded":
-        return "Parcialmente pago"
-    elif s in ("cancelled", "canceled"):
+    else:
         return "Cancelado"
-    
-    return status_original
